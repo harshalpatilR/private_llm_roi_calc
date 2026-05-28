@@ -261,6 +261,12 @@ with gr.Blocks() as demo:
     )
     
     # --- END CHANGE 2001 ---
+    
+    demo.load(
+        update_ui, 
+        inputs=all_inputs, 
+        outputs=all_outputs
+    )
 
 
 if __name__ == "__main__":
