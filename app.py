@@ -1,17 +1,40 @@
 import gradio as gr
 import base64
+import csv
 from modules.calculations import calculate_cloud_costs, format_token_label
 from ui.styling import HPE_COLORS, CUSTOM_CSS, get_theme
 
-# Initial Data
-DEFAULT_MODELS = [
-    {"name": "Claude Opus 4", "in": 15.00, "out": 75.00, "weight": 86},
-    {"name": "Claude Sonnet 4.5", "in": 3.00, "out": 15.00, "weight": 12},
-    {"name": "Claude Haiku 3.5", "in": 0.80, "out": 4.00, "weight": 2},
-    {"name": "GPT-4o", "in": 2.50, "out": 10.00, "weight": 0},
-    {"name": "Gemini 2.0 Pro", "in": 7.00, "out": 21.00, "weight": 0},
-    {"name": "Gemini 2.0 Flash", "in": 0.10, "out": 0.40, "weight": 0},
-]
+# --- START CHANGE 4001: CSV DATA LOADER ---
+def load_models_from_csv(filepath="public_models.csv"):
+    models = []
+    try:
+        with open(filepath, mode='r', encoding='utf-8-sig') as f:
+            reader = csv.DictReader(f, skipinitialspace=True)
+
+            for row in reader:
+                print(row)
+                models.append({
+                    "name": row['name'],
+                    "in": float(row['in']),
+                    "out": float(row['out']),
+                    "weight": int(row['weight'])
+                })
+    except FileNotFoundError:
+        # Fallback to empty list if file is missing
+        return []
+    return models
+
+DEFAULT_MODELS = load_models_from_csv()
+
+# # Initial Data
+# DEFAULT_MODELS = [
+#     {"name": "Claude Opus 4", "in": 15.00, "out": 75.00, "weight": 86},
+#     {"name": "Claude Sonnet 4.5", "in": 3.00, "out": 15.00, "weight": 12},
+#     {"name": "Claude Haiku 3.5", "in": 0.80, "out": 4.00, "weight": 2},
+#     {"name": "GPT-4o", "in": 2.50, "out": 10.00, "weight": 0},
+#     {"name": "Gemini 2.0 Pro", "in": 7.00, "out": 21.00, "weight": 0},
+#     {"name": "Gemini 2.0 Flash", "in": 0.10, "out": 0.40, "weight": 0},
+# ]
 
 def get_base64_img(path):
     try:
@@ -261,7 +284,7 @@ with gr.Blocks() as demo:
     )
     
     # --- END CHANGE 2001 ---
-    
+
     demo.load(
         update_ui, 
         inputs=all_inputs, 

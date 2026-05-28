@@ -1,0 +1,7 @@
+﻿name,in,out,weight
+Claude Opus 4,15,75,86
+Claude Sonnet 4.5,3,15,12
+Claude Haiku 3.5,0.8,4,2
+GPT-4o,2.5,10,0
+Gemini 2.0 Pro,7,21,0
+Gemini 2.0 Flash,0.1,0.4,0
