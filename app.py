@@ -247,7 +247,20 @@ with gr.Blocks() as demo:
     for inp in all_inputs:
         inp.change(update_ui, inputs=all_inputs, outputs=all_outputs)
 
+    # --- START CHANGE 2001: LINKED SLIDERS ---
+    
+    def sync_output_pct(input_val):
+        """Automatically sets output to the remainder of 100"""
+        return 100 - input_val
 
+    # When Input % changes, update Output %
+    in_pct.change(
+        sync_output_pct,
+        inputs=[in_pct],
+        outputs=[out_pct]
+    )
+    
+    # --- END CHANGE 2001 ---
 
 
 if __name__ == "__main__":
