@@ -165,8 +165,15 @@ with gr.Blocks() as demo:
     with gr.Column(scale=1):
             gr.Markdown("Internal use only\n**by HPE PCAI Sales Engineering**")
 
+            # refresh on demand
+            refresh_btn = gr.Button(
+                    "🔄 Update Results", 
+                    variant="primary", 
+                    elem_id="global-refresh-btn"
+                )
+
     with gr.Tabs():
-        with gr.Tab("Cloud API"):
+        with gr.Tab("Cloud API") as cloud_tab:
             with gr.Row():
                 # LEFT INPUTS
                 with gr.Column(scale=3):
@@ -224,7 +231,12 @@ with gr.Blocks() as demo:
                 # --- NEW MODIFICATION: ADD EXPANDABLE BREAKDOWN TABLE BELOW BREAKDOWN ---
                     with gr.Accordion("Detailed Calculation Breakdown", open=False, elem_id="calc-accordion"):
                         details_table_out = gr.HTML("<p style='color: #6B8099;'>Adjust parameters to generate itemized ledger.</p>")
-
+            
+            # # Trigger update ONLY when this tab is selected/clicked
+            #     # 1. Define input/output groups
+            # all_inputs = [raw_token_count, in_pct, out_pct] + weight_sliders + visible_prices
+            # all_outputs = [total_cost_out, cpm_out, breakdown_out, details_table_out]
+            # cloud_tab.select(update_ui, inputs=all_inputs, outputs=all_outputs)
 
         with gr.Tab("Private Cloud AI"):
             gr.Markdown("### PCAI Configurator\n*Section under development*")
@@ -240,56 +252,54 @@ with gr.Blocks() as demo:
     </div>
     """)
 
-    # Reactivity
-    all_inputs = [token_slider, in_pct, out_pct] + weight_sliders + visible_prices
+# --- START CHANGE 11001: CLEAN TAB-STABLE REACTIVITY ---
+    # 1. Define input/output groups
+    all_inputs = [raw_token_count, in_pct, out_pct] + weight_sliders + visible_prices
     all_outputs = [total_cost_out, cpm_out, breakdown_out, details_table_out]
     
-    # Sync label
-    token_slider.change(lambda x: f"**Current: {format_token_label(x)} Tokens**", token_slider, token_display)
-    # --- CHANGE 3: ADD MAPPING FUNCTION & UPDATE REACTIVITY ---
-
+    # 2. Map Slider Index to Raw Count (Instant local update)
     def map_token_step(index):
-        """Maps slider index (0-9) to actual value and label"""
         val = TOKEN_STEPS[int(index)]
         label = TOKEN_LABELS[int(index)]
         return val, f"**Current: {label} Tokens**"
 
-    # Connect the index slider to the mapping function
     token_slider.change(
         map_token_step, 
         inputs=[token_slider], 
         outputs=[raw_token_count, token_display]
     )
 
-    # Update your 'all_inputs' list to use the hidden raw_token_count for calculations
-    # Replace token_slider with raw_token_count in the list below:
-    all_inputs = [raw_token_count, in_pct, out_pct] + weight_sliders + visible_prices
+    # 3. Slider Sync (Input % -> Output %)
+    in_pct.change(lambda x: 100 - x, inputs=[in_pct], outputs=[out_pct])
 
-
-    # Continuous updates
-    for inp in all_inputs:
-        inp.change(update_ui, inputs=all_inputs, outputs=all_outputs)
-
-    # --- START CHANGE 2001: LINKED SLIDERS ---
+    # 4. Trigger UI Updates
+    # We only trigger when a slider actually moves. 
+    # This keeps the app idle (and the tabs fast) until the user interacts.
+    main_triggers = [raw_token_count, in_pct, out_pct] + weight_sliders
     
-    def sync_output_pct(input_val):
-        """Automatically sets output to the remainder of 100"""
-        return 100 - input_val
+    for trigger in main_triggers:
+        trigger.change(
+            update_ui, 
+            inputs=all_inputs, 
+            outputs=all_outputs
+        )
 
-    # When Input % changes, update Output %
-    in_pct.change(
-        sync_output_pct,
-        inputs=[in_pct],
-        outputs=[out_pct]
-    )
-    
-    # --- END CHANGE 2001 ---
+    # 5. Price Updates (Using .blur to prevent keystroke-lag)
+    for price_ctrl in visible_prices:
+        price_ctrl.blur(update_ui, inputs=all_inputs, outputs=all_outputs)
 
-    demo.load(
-        update_ui, 
-        inputs=all_inputs, 
+    # NO demo.load HERE - This prevents the startup freeze.
+    # 4. THE GLOBAL TRIGGER
+    # This button is outside the tabs, so it works from anywhere.
+    refresh_btn.click(
+        update_ui,
+        inputs=all_inputs,
         outputs=all_outputs
     )
+
+
+
+    # --- END CHANGE 11001 ---
 
 
 if __name__ == "__main__":
