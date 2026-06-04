@@ -54,41 +54,95 @@ def format_token_label(index):
     try: return labels[int(index)]
     except: return "N/A"
 
-# def calculate_cloud_costs(total_tokens, input_pct, output_pct, models_data):
-#     """
-#     models_data: List of dicts {name, input_price, output_price, weight}
-#     """
-#     # 1. Normalize Model Mix
-#     total_weight = sum(m['weight'] for m in models_data)
-#     if total_weight == 0:
-#         return 0, 0, []
 
-#     results = []
-#     grand_total_cost = 0
+# --- START CHANGE 16001: DEBUGGABLE PCAI MATH ---
 
-#     for m in models_data:
-#         norm_pct = m['weight'] / total_weight
-#         model_tokens = total_tokens * norm_pct
-        
-#         in_tokens = model_tokens * (input_pct / 100)
-#         out_tokens = model_tokens * (output_pct / 100)
-        
-#         in_cost = (in_tokens / 1_000_000) * m['input_price']
-#         out_cost = (out_tokens / 1_000_000) * m['output_price']
-#         model_cost = in_cost + out_cost
-        
-#         grand_total_cost += model_cost
-#         results.append({
-#             "name": m['name'],
-#             "cost": model_cost,
-#             "pct_of_total": 0 # Calculated after loop
-#         })
+# Global toggle for console debugging
+DEBUG_MODE = True 
 
-#     # Calculate percentages for the breakdown
-#     for r in results:
-#         if grand_total_cost > 0:
-#             r['pct_of_total'] = (r['cost'] / grand_total_cost) * 100
+def calculate_pcai_costs(tshirt_data, model_instances, precision, hours, days, capex_price, capex_years, private_llm_benchmarks):
+    if DEBUG_MODE:
+        print("\n--- DEBUG: PCAI CALCULATION START ---")
+        print(f"Input: T-Shirt={tshirt_data.get('size_name')}, Precision={precision}")
+        print(f"Time: {hours}hrs/day, {days}days/yr | Capex: ${capex_price} over {capex_years}yrs")
 
-#     avg_cpm = (grand_total_cost / total_tokens) * 1_000_000 if total_tokens > 0 else 0
+    # 1. Parse T-Shirt GPU info
+    gpu_info = tshirt_data.get("GPU Type / Qty", "0x Unknown")
+    try:
+        gpu_qty = int(gpu_info.split('x')[0])
+        gpu_type = "rtx" if "RTX" in gpu_info else "h200"
+    except:
+        gpu_qty = 0
+        gpu_type = "rtx"
+
+    prec_suffix = "16" if "16" in precision else "8"
+    tps_col = f"{gpu_type}_tps_{prec_suffix}"
+    tp_col = f"{gpu_type}_tp_{prec_suffix}"
+
+    if DEBUG_MODE:
+        print(f"Logic: Selected GPU={gpu_type.upper()}, Target Columns=[{tps_col}, {tp_col}]")
+
+    total_tps = 0
+    total_gpus_used = 0
+    breakdown = []
+
+    for i, model in enumerate(private_llm_benchmarks):
+        instances = model_instances[i]
+        if instances > 0:
+            tp_val = float(model.get(tp_col, 0))
+            tps_val = float(model.get(tps_col, 0))
+            
+            m_gpus = instances * tp_val
+            # throughput = tokens per GPU-second * total GPUs assigned to this model type
+            m_tps = m_gpus * tps_val 
+            
+            total_tps += m_tps
+            total_gpus_used += m_gpus
+            
+            if DEBUG_MODE:
+                print(f"Model [{model['model']}]: {instances} inst * {tp_val} TP = {m_gpus} GPUs | TPS: {m_tps:,.0f}")
+
+            breakdown.append({
+                "name": model['model'],
+                "instances": instances,
+                "tp": tp_val,
+                "tps_per_gpu": tps_val,
+                "total_gpus": m_gpus,
+                "total_tps": m_tps,
+                "gpu_type": gpu_info.split(' ')[-1]
+            })
+
+    # Token Math
+    tokens_per_hour = total_tps * 3600
+    tokens_per_day = tokens_per_hour * hours
+    total_tokens_annual = tokens_per_day * days
     
-#     return grand_total_cost, avg_cpm, results
+    # Cost Math
+    total_days = (capex_years * days) if capex_years > 0 else 1
+    price_per_day = capex_price / total_days if total_days > 0 else 0
+    cpm = (price_per_day / (tokens_per_day / 1e6)) if tokens_per_day > 0 else 0
+    
+    if DEBUG_MODE:
+        print(f"Results: Total Tokens/Day={tokens_per_day:,.0f} | Total GPUs Used={total_gpus_used}/{gpu_qty}")
+        print(f"Financials: Price/Day=${price_per_day:,.2f} | CPM=${cpm:,.4f}")
+        print("--- DEBUG: PCAI CALCULATION END ---\n")
+
+    error_msg = ""
+    if total_gpus_used > gpu_qty:
+        error_msg = f"⚠️ Over-provisioned: Using {total_gpus_used} GPUs but system only has {gpu_qty}."
+
+    return total_tokens_annual, cpm, breakdown, error_msg, total_gpus_used, gpu_qty
+
+# --- END CHANGE 16001 ---
+
+
+def format_large_number(num):
+    """Formats large numbers into K, M, or B suffixes for the UI."""
+    if num >= 1_000_000_000:
+        return f"{num / 1_000_000_000:.1f}B"
+    if num >= 1_000_000:
+        return f"{num / 1_000_000:.1f}M"
+    if num >= 1_000:
+        return f"{num / 1_000:.1f}K"
+    return str(int(num))
+

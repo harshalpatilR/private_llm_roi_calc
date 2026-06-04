@@ -115,7 +115,6 @@ body, .gradio-container {{
 }}
 """
 
-
 # CUSTOM_CSS = f"""
 # /* 1. Global Scaling and Branding */
 # :root {{

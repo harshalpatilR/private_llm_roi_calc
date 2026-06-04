@@ -1,0 +1,12 @@
+Feature,Developer System,Small (1 Worker Node),Small (2 Worker Nodes),Medium,Large
+Control Node Qty,1,3,3,3,3
+Worker Node Qty,1,1,2,2,2
+Worker Node Generation,HPE ProLiant Compute Gen12,HPE ProLiant Gen12,HPE ProLiant Gen12,HPE ProLiant Gen12,HPE ProLiant Gen12
+CPU Type / Qty (per node),2x Xeon 32 Core CPUs,2x Xeon 64 Core CPUs,2x Xeon 64 Core CPUs,2x Xeon 64 Core CPUs,2x Xeon 64 Core CPUs
+GPU Type / Qty,2x RTX Pro 6000,4x RTX Pro 6000,8x RTX Pro 6000,8x H200,16x H200
+Storage,22 TB Internal File/Object,109 TB GreenLake for File with Object Storage,109 TB GreenLake for File with Object Storage,109 TB GreenLake for File with Object Storage,217TB GreenLake for File with Object Storage
+Networking Switches,N/A,"NVIDIA 4700M, Aruba 6300M (oobm)","NVIDIA 4700M, Aruba 6300M (oobm)","NVIDIA 4700M, Aruba 6300M (oobm)","NVIDIA 4700M, Aruba 6300M (oobm)"
+NIC Speed (AI Network),200 Gb NICs,400 Gb NICs,400 Gb NICs,400 Gb NICs,400 Gb NICs
+Rack / PDU,N/A,1x 42U Rack with PDUs,1x 42U Rack with PDUs,1x 42U Rack with PDUs,1x 42U Rack with PDUs
+GPU Memory (GB),96,96,96,141,141
+Total GPU Memory (GB),192,384,768,1128,2256
