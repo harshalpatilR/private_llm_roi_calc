@@ -109,8 +109,10 @@ def update_pcai_ui(*args):
     total_tps = sum(b['total_tps'] for b in breakdown)
     tokens_per_day = total_tps * 3600 * work_hours
     
-    token_str = format_large_number(tokens_per_day)
-    cpm_str = f"${cpm:,.2f} / M tokens"
+    #token_str = format_large_number(tokens_per_day)
+    token_str = f"{format_large_number(tokens_per_day)} <span class='unit-text'>tokens</span>"
+    #cpm_str = f"${cpm:,.2f} / M tokens"
+    cpm_str = f"${cpm:,.2f} <span class='unit-text'>/ M tokens</span>"
     
     # 6. Generate Visual Breakdown HTML
     breakdown_html = "<div style='display: flex; flex-direction: column; gap: 12px;'>"
@@ -131,16 +133,16 @@ def update_pcai_ui(*args):
         """
     breakdown_html += "</div>"
 
-    # 7. Generate Detailed Metric Table HTML
+    # 7. Sizing Details Table (Right-Justified & Proper English)
     table_html = f"<div style='color:#FF4B4B; margin-bottom:10px; font-weight:bold;'>{error_msg}</div>" if error_msg else ""
     table_html += """<table style='width:100%; font-size:0.85rem; border-collapse:collapse; color: white;'>
         <thead>
             <tr style='border-bottom:2px solid #01A982; text-align:left;'>
-                <th style='padding:10px 5px;'>Model</th>
-                <th style='padding:10px 5px;'>TP</th>
-                <th style='padding:10px 5px;'>Inst.</th>
-                <th style='padding:10px 5px;'>GPUs</th>
-                <th style='padding:10px 5px;'>TPS</th>
+                <th style='padding:10px 5px;'>Model Name</th>
+                <th style='padding:10px 5px; text-align:right;'>Tensor Parallel</th>
+                <th style='padding:10px 5px; text-align:right;'>Model Instances</th>
+                <th style='padding:10px 5px; text-align:right;'>GPU(s) Used</th>
+                <th style='padding:10px 5px; text-align:right;'>Tokens Per Second</th>
             </tr>
         </thead>
         <tbody>"""
@@ -148,25 +150,26 @@ def update_pcai_ui(*args):
     for b in breakdown:
         table_html += f"""
             <tr style='border-bottom: 1px solid #2A3F5C;'>
-                <td style='padding:8px 5px;'>{b['name']}</td>
-                <td style='padding:8px 5px;'>{b['tp']}</td>
-                <td style='padding:8px 5px;'>{int(b['instances'])}</td>
-                <td style='padding:8px 5px;'>{b['total_gpus']}</td>
-                <td style='padding:8px 5px;'>{b['total_tps']:,.0f}</td>
+                <td style='padding:8px 5px;'>{str(b['name']).title()}</td>
+                <td style='padding:8px 5px; text-align:right;'>{b['tp']:.1f}</td>
+                <td style='padding:8px 5px; text-align:right;'>{int(b['instances']):.1f}</td>
+                <td style='padding:8px 5px; text-align:right;'>{b['total_gpus']:.1f}</td>
+                <td style='padding:8px 5px; text-align:right;'>{b['total_tps']:,.0f}</td>
             </tr>"""
             
     table_html += f"""
         </tbody>
         <tfoot>
             <tr style='background: rgba(1, 169, 130, 0.1); font-weight: bold;'>
-                <td style='padding:10px 5px;'>TOTAL</td>
-                <td style='padding:10px 5px;'>-</td>
-                <td style='padding:10px 5px;'>-</td>
-                <td style='padding:10px 5px;'>{used_gpu} / {avail_gpu}</td>
-                <td style='padding:10px 5px;'>{total_tps:,.0f}</td>
+                <td style='padding:10px 5px;'>Total System</td>
+                <td style='padding:10px 5px; text-align:right;'>-</td>
+                <td style='padding:10px 5px; text-align:right;'>-</td>
+                <td style='padding:10px 5px; text-align:right;'>{used_gpu:.1f} / {avail_gpu:.1f}</td>
+                <td style='padding:10px 5px; text-align:right;'>{total_tps:,.0f}</td>
             </tr>
         </tfoot>
     </table>"""
+
 
     return token_str, cpm_str, breakdown_html, table_html
 
@@ -213,7 +216,8 @@ def update_ui(*args):
     
     # Format labels
     cost_str = f"${total_cost:,.0f}"
-    cpm_str = f"${cpm:,.2f} / M tokens"
+    #cpm_str = f"${cpm:,.2f} / M tokens"
+    cpm_str = f"${cpm:,.2f} <span class='unit-text'>/ M tokens</span>"
     
     # LOOP 1: Generates the "Cost Breakdown by Model" visual bars (Side Column)
     # Generate simple HTML breakdown
@@ -360,7 +364,7 @@ with gr.Blocks() as demo:
                     gr.Markdown("### Results")
                     with gr.Group():
                         total_cost_out = gr.Markdown("## $0", elem_classes="stat-card")
-                        cpm_out = gr.Markdown("$0.00 / M tokens", elem_classes="green-text")
+                        cpm_out = gr.Markdown("$0.00 / M tokens", elem_classes=["stat-card","green-text"])
                     
                     gr.Markdown("#### Cost Breakdown by Model")
                     breakdown_out = gr.HTML("Select distribution to see breakdown")
@@ -386,17 +390,41 @@ with gr.Blocks() as demo:
                     
                     with gr.Row():
                         tshirt_buttons = []
+                    # Function to update button appearances
+                        def on_tshirt_click(idx):
+                            # Returns an array of updates for each button
+                            updates = []
+                            for i in range(len(TSHIRTS)):
+                                new_variant = "primary" if i == idx else "secondary"
+                                updates.append(gr.update(variant=new_variant))
+                            # Return the updates + the index for the hidden number
+                            return [*updates, idx]
+
+
                         for idx, ts in enumerate(TSHIRTS):
                             with gr.Column(min_width=150):
                                 # Create label from CSV data (image_4fb085.png)
                                 btn_label = f"{ts['size_name']}\n{ts.get('GPU Type / Qty', '')}"
                                 btn = gr.Button(
                                     btn_label, 
-                                    variant="primary" if idx == 0 else "secondary"
+                                    variant="primary" if idx == 0 else "secondary",
+                                    elem_classes=["system-tile"]  # Ensure this matches your CSS class name
                                 )
                                 # When clicked, update the hidden Number component
-                                btn.click(lambda i=idx: i, None, selected_tshirt_idx)
+                                #btn.click(lambda i=idx: i, None, selected_tshirt_idx)
                                 tshirt_buttons.append(btn)
+
+                            # Hidden index component
+                                selected_tshirt_idx = gr.Number(value=0, visible=False)
+
+                                # Set up clicks to trigger the visual update
+                                for idx, btn in enumerate(tshirt_buttons):
+                                    btn.click(
+                                        fn=on_tshirt_click,
+                                        inputs=[gr.State(idx)], # Pass the index of the clicked button
+                                        outputs=tshirt_buttons + [selected_tshirt_idx]
+                                    )
+
 
                     gr.Markdown("### 2. Private LLM Model Selection")
                     pcai_model_sliders = []
@@ -416,7 +444,7 @@ with gr.Blocks() as demo:
                     with gr.Row():
                         with gr.Column():
                             gr.Markdown("### 3. Precision")
-                            precision_radio = gr.Radio(["16 bit", "8 bit", "4 bit (Future)"], value="16 bit", label="Weight Quantization")
+                            precision_radio = gr.Radio(["16 bit", "8 bit"], value="16 bit", label="Weight Quantization") #, "4 bit (Future)"]
                         with gr.Column():
                             gr.Markdown("### 4. Utilization")
                             with gr.Row():
@@ -425,18 +453,28 @@ with gr.Blocks() as demo:
 
                     gr.Markdown("### 5. System Pricing")
                     with gr.Row():
-                        capex_price = gr.Number(250000, label="Capex Price ($)")
+                        capex_price = gr.Number(1500000, label="Capex Price ($)")
                         capex_years = gr.Number(3, label="Amortization Years")
                     
-                    with gr.Accordion("GreenLake Consumption (Future)", open=False):
-                        gr.Number(label="Monthly Base", interactive=False)
-                        gr.Slider(label="Commit %", interactive=False)
+                    # with gr.Accordion("GreenLake Consumption (Future)", open=False):
+                    #     gr.Number(label="Monthly Base", interactive=False)
+                    #     gr.Slider(label="Commit %", interactive=False)
+
+                    # Replace the GreenLake Accordion with this Model Reference section
+                    with gr.Accordion("Private LLM Reference Data", open=False):
+                        gr.Markdown("Below are the model parameters loaded that are used for sizing calculations.")
+                        # Display the loaded PRIVATE_LLMS list as a table
+                        gr.Dataframe(
+                            value=PRIVATE_LLMS,
+                            interactive=False,
+                            label="Loaded Private Model Library"
+                        )
 
                 with gr.Column(scale=2):
                     gr.Markdown("### PCAI Results")
                     with gr.Group():
                         pcai_total_tokens = gr.Markdown("## 0", elem_classes="stat-card")
-                        pcai_cpm = gr.Markdown("$0.00 / M tokens", elem_classes="green-text")
+                        pcai_cpm = gr.Markdown("$0.00 / M tokens", elem_classes=["stat-card", "green-text"])
                     
                     pcai_breakdown_viz = gr.HTML()
                     with gr.Accordion("Sizing Details", open=False):

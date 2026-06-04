@@ -68,8 +68,10 @@ body, .gradio-container {{
 .green-text {{ 
     color: {HPE_COLORS['green']} !important; 
     font-weight: bold !important;
-    font-size: 1.6rem !important; /* Significantly increased for results visibility */
+    font-size: 2.8rem !important; /* Significantly increased for results visibility */
+    font-family: 'HPE Metric Regular', sans-serif !important;    
     padding: 5px 0 !important;
+    line-height: 1.1 !important;
     display: block !important;
 }}
 
@@ -112,6 +114,45 @@ body, .gradio-container {{
 
 .gradio-container input[type=number].slider-input {{ 
     display: none !important; /* Hides numeric input box */
+}}
+
+
+/* Add to ui/styling.py */
+.system-tile {{
+    min-height: 100px !important;
+    max-height: 100px !important;
+    display: flex !important;
+    align-items: center !important;
+    justify-content: center !important;
+    text-align: center !important;
+    font-weight: 600 !important;
+    line-height: 1.2 !important;
+    padding: 10px !important;
+    transition: all 0.2s ease !important;
+}}
+
+/* Ensure the primary (green) button stands out */
+.system-tile.primary {{
+    border: 2px solid #00E8C0 !important;
+    box-shadow: 0 0 10px rgba(1, 169, 130, 0.4) !important;
+}}
+
+/* THIS IS THE MISSING PIECE: It aligns the number and the label */
+.stat-card h2 {{
+    display: flex !important;
+    align-items: baseline !important; /* Aligns the 'bottom' of the text */
+    gap: 10px !important;
+    margin: 0 !important;
+    color: {HPE_COLORS['green']} !important;
+    font-size: 2.8rem !important;
+}}
+
+/* This makes the word 'tokens' look professional and small */
+.unit-text {{
+    font-size: 1.2rem !important;
+    color: {HPE_COLORS['muted']} !important;
+    font-weight: normal !important;
+    text-transform: lowercase;
 }}
 """
 
