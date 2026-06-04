@@ -110,7 +110,7 @@ def update_pcai_ui(*args):
     tokens_per_day = total_tps * 3600 * work_hours
     
     #token_str = format_large_number(tokens_per_day)
-    token_str = f"{format_large_number(tokens_per_day)} <span class='unit-text'>tokens</span>"
+    token_str = f"{format_large_number(tokens_per_day)} <span class='unit-text'>tokens per day</span>"
     #cpm_str = f"${cpm:,.2f} / M tokens"
     cpm_str = f"${cpm:,.2f} <span class='unit-text'>/ M tokens</span>"
     
@@ -218,7 +218,7 @@ def update_ui(*args):
     cost_str = f"${total_cost:,.0f}"
     #cpm_str = f"${cpm:,.2f} / M tokens"
     cpm_str = f"${cpm:,.2f} <span class='unit-text'>/ M tokens</span>"
-    
+
     # LOOP 1: Generates the "Cost Breakdown by Model" visual bars (Side Column)
     # Generate simple HTML breakdown
     html_breakdown = "<div style='display: flex; flex-direction: column; gap: 10px;'>"

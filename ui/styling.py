@@ -154,6 +154,13 @@ body, .gradio-container {{
     font-weight: normal !important;
     text-transform: lowercase;
 }}
+
+/* Targets the label text wrapper for unselected radio buttons */
+.gradio-radio label:not(.selected) span {{
+    color: #000000 !important; /* Forces font color to solid black */
+    font-weight: 500 !important; /* Slightly increases weight for better readability */
+}}
+
 """
 
 
