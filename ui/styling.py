@@ -155,11 +155,61 @@ body, .gradio-container {{
     text-transform: lowercase;
 }}
 
-/* Targets the label text wrapper for unselected radio buttons */
+/* 1. Force the inner span text container of the unselected choice to pure black */
 .gradio-radio label:not(.selected) span {{
-    color: #000000 !important; /* Forces font color to solid black */
-    font-weight: 500 !important; /* Slightly increases weight for better readability */
+    color: #000000 !important;
+    font-weight: 600 !important;   /* Enhances text clarity on the white tile */
+    opacity: 1.0 !important;       /* Prevents Gradio from lowering the visibility layer */
 }}
+
+/* 2. Optional: Clean up the radio circle icon itself so it isn't faint */
+.gradio-radio label:not(.selected) input[type="radio"] {{
+    border-color: #000000 !important;
+}}
+
+/* Make the overall container taller and give labels larger text */
+.gradio-radio {{
+    font-size: 1.1rem !important; /* Increase text size from default */
+}}
+
+/* Make the unselected white box look larger and match system tiles */
+.gradio-radio label {{
+    padding: 12px 20px !important; /* Increases target area and block size */
+    min-height: 48px !important;    /* Assures a prominent block height */
+    display: inline-flex !important;
+    align-items: center !important;
+}}
+
+/* Optional: Make the radio dot/circle icons slightly larger to scale with the text */
+.gradio-radio input[type="radio"] {{
+    transform: scale(1.2) !important;
+    margin-right: 8px !important;
+}}
+
+.gradio-dataframe table thead th {{
+        background-color: #000000 !important;
+        color: #01A982 !important;
+        font-size: 0.75rem !important;
+        font-weight: 600 !important;
+        border-bottom: 2px solid #01A982 !important;
+    }}
+
+    .gradio-dataframe table tbody td {{
+        background-color: #000000 !important;
+        color: #01A982 !important;
+        font-size: 0.75rem !important;
+        border: 1px solid #2A3F5C !important;
+    }}
+
+    .gradio-dataframe table tr:nth-child(even) td {{
+        background-color: #000000 !important;
+    }}
+
+    .gradio-dataframe .table-wrap, 
+    .gradio-dataframe table {{
+        background-color: #000000 !important;
+        border-radius: 4px !important;
+    }}
 
 """
 
