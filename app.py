@@ -475,35 +475,35 @@ with gr.Blocks() as demo:
                         gr.Markdown("Below are the model parameters loaded that are used for sizing calculations.")
                         # Construct a raw HTML Table string with doubled curly braces for Python string safety
                         table_html = """
-                        <div style="overflow-x: auto;">
-                            <table style="width:100%; font-size:0.75rem; border-collapse:collapse; color: #01A982; background-color: #000000; border-radius: 4px;">
-                                <thead>
-                                    <tr style="border-bottom:2px solid #01A982; text-align:left;">
-                                        <th style="padding:8px 10px; background-color: #000000; color: #01A982; font-weight:600;">Model</th>
-                                        <th style="padding:8px 10px; background-color: #000000; color: #01A982; font-weight:600; text-align:right;">RTX TPS (16-bit)</th>
-                                        <th style="padding:8px 10px; background-color: #000000; color: #01A982; font-weight:600; text-align:right;">RTX TPS (8-bit)</th>
-                                        <th style="padding:8px 10px; background-color: #000000; color: #01A982; font-weight:600; text-align:right;">RTX TP (16-bit)</th>
-                                        <th style="padding:8px 10px; background-color: #000000; color: #01A982; font-weight:600; text-align:right;">RTX TP (8-bit)</th>
-                                        <th style="padding:8px 10px; background-color: #000000; color: #01A982; font-weight:600; text-align:right;">H200 TPS (16-bit)</th>
-                                        <th style="padding:8px 10px; background-color: #000000; color: #01A982; font-weight:600; text-align:right;">H200 TPS (8-bit)</th>
-                                        <th style="padding:8px 10px; background-color: #000000; color: #01A982; font-weight:600; text-align:right;">H200 TP (16-bit)</th>
-                                        <th style="padding:8px 10px; background-color: #000000; color: #01A982; font-weight:600; text-align:right;">H200 TP (8-bit)</th>
-                                    </tr>
-                                </thead>
-                                <tbody>"""
-                                
+                            <div style="overflow-x: auto; width: 100%;">
+                                <table style="width:100%; font-size:0.75rem; border-collapse:collapse; color: #01A982; background-color: #1A2744; border-radius: 4px; table-layout: auto;">
+                                    <thead>
+                                        <tr style="border-bottom:2px solid #01A982; text-align:left;">
+                                            <th style="padding:8px 10px; background-color: #1A2744; color: #01A982; font-weight:600; white-space: nowrap;">Model</th>
+                                            <th style="padding:8px 10px; background-color: #1A2744; color: #01A982; font-weight:600; text-align:right; white-space: nowrap;">RTX TPS (16-bit)</th>
+                                            <th style="padding:8px 10px; background-color: #1A2744; color: #01A982; font-weight:600; text-align:right; white-space: nowrap;">RTX TPS (8-bit)</th>
+                                            <th style="padding:8px 10px; background-color: #1A2744; color: #01A982; font-weight:600; text-align:right; white-space: nowrap;">RTX TP (16-bit)</th>
+                                            <th style="padding:8px 10px; background-color: #1A2744; color: #01A982; font-weight:600; text-align:right; white-space: nowrap;">RTX TP (8-bit)</th>
+                                            <th style="padding:8px 10px; background-color: #1A2744; color: #01A982; font-weight:600; text-align:right; white-space: nowrap;">H200 TPS (16-bit)</th>
+                                            <th style="padding:8px 10px; background-color: #1A2744; color: #01A982; font-weight:600; text-align:right; white-space: nowrap;">H200 TPS (8-bit)</th>
+                                            <th style="padding:8px 10px; background-color: #1A2744; color: #01A982; font-weight:600; text-align:right; white-space: nowrap;">H200 TP (16-bit)</th>
+                                            <th style="padding:8px 10px; background-color: #1A2744; color: #01A982; font-weight:600; text-align:right; white-space: nowrap;">H200 TP (8-bit)</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody>"""
+                                    
                         for m in PRIVATE_LLMS:
                             table_html += f"""
                                     <tr style="border-bottom: 1px solid #2A3F5C;">
-                                        <td style="padding:8px 10px; background-color: #000000; font-weight:600; color: #01A982;">{m.get('model', 'N/A')}</td>
-                                        <td style="padding:8px 10px; background-color: #000000; text-align:right; color: #01A982;">{m.get('rtx_tps_16', '0')}</td>
-                                        <td style="padding:8px 10px; background-color: #000000; text-align:right; color: #01A982;">{m.get('rtx_tps_8', '0')}</td>
-                                        <td style="padding:8px 10px; background-color: #000000; text-align:right; color: #01A982;">{m.get('rtx_tp_16', '0')}</td>
-                                        <td style="padding:8px 10px; background-color: #000000; text-align:right; color: #01A982;">{m.get('rtx_tp_8', '0')}</td>
-                                        <td style="padding:8px 10px; background-color: #000000; text-align:right; color: #01A982;">{m.get('h200_tps_16', '0')}</td>
-                                        <td style="padding:8px 10px; background-color: #000000; text-align:right; color: #01A982;">{m.get('h200_tps_8', '0')}</td>
-                                        <td style="padding:8px 10px; background-color: #000000; text-align:right; color: #01A982;">{m.get('h200_tp_16', '0')}</td>
-                                        <td style="padding:8px 10px; background-color: #000000; text-align:right; color: #01A982;">{m.get('h200_tp_8', '0')}</td>
+                                        <td style="padding:8px 10px; background-color: #1A2744; font-weight:600; color: #01A982; white-space: nowrap;">{m.get('model', 'N/A')}</td>
+                                        <td style="padding:8px 10px; background-color: #1A2744; text-align:right; color: #01A982;">{m.get('rtx_tps_16', '0')}</td>
+                                        <td style="padding:8px 10px; background-color: #1A2744; text-align:right; color: #01A982;">{m.get('rtx_tps_8', '0')}</td>
+                                        <td style="padding:8px 10px; background-color: #1A2744; text-align:right; color: #01A982;">{m.get('rtx_tp_16', '0')}</td>
+                                        <td style="padding:8px 10px; background-color: #1A2744; text-align:right; color: #01A982;">{m.get('rtx_tp_8', '0')}</td>
+                                        <td style="padding:8px 10px; background-color: #1A2744; text-align:right; color: #01A982;">{m.get('h200_tps_16', '0')}</td>
+                                        <td style="padding:8px 10px; background-color: #1A2744; text-align:right; color: #01A982;">{m.get('h200_tps_8', '0')}</td>
+                                        <td style="padding:8px 10px; background-color: #1A2744; text-align:right; color: #01A982;">{m.get('h200_tp_16', '0')}</td>
+                                        <td style="padding:8px 10px; background-color: #1A2744; text-align:right; color: #01A982;">{m.get('h200_tp_8', '0')}</td>
                                     </tr>"""
                                     
                         table_html += """
@@ -511,8 +511,7 @@ with gr.Blocks() as demo:
                             </table>
                         </div>"""
                         
-                        # Render the native HTML block directly into the user interface
-                        gr.HTML(table_html)                        
+                        gr.HTML(table_html)
 
 
                 with gr.Column(scale=2):
