@@ -146,3 +146,81 @@ def format_large_number(num):
         return f"{num / 1_000:.1f}K"
     return str(int(num))
 
+# Update in calculations.py
+# GL calculations
+# --- START OF GREENLAKE CALCULATION ENGINE ---
+def calculate_greenlake_metrics(tshirt_row, committed_pct, 
+                               gpu_commit_rate, gpu_burst_rate, 
+                               storage_commit_rate, total_monthly_tokens_million=0):
+    """
+    Calculates GreenLake monthly operating costs and token efficiency profiles.
+    
+    Operational Rules (Per HPE Global Sizing Guidelines):
+    - Constant B = 730.5 Hours/Month (Based on 365.25 days/year standard)
+    - Storage Cost = Total Base GB * (Commit % / 100) * Storage Commit Rate
+    - Storage never enters burst states (no burst rate applied on delta)
+    """
+    try:
+        # Extract physical hardware allocations from the selected T-Shirt dictionary block
+        gpu_info = tshirt_row.get("GPU Type / Qty", "2x Unknown")
+        try:
+            gpus = float(gpu_info.split('x')[0])
+        except:
+            gpus = 2.0 # Developer fallback safety
+
+        # Handle text metrics parsing from storage data rows (e.g. "20 TB" -> 20000 GB)
+        storage_info = tshirt_row.get("Storage", "20 TB")
+        try:
+            if "TB" in storage_info:
+                storage_gb = float(storage_info.replace("TB", "").strip()) * 1000.0
+            else:
+                storage_gb = float(storage_info.replace("GB", "").strip())
+        except:
+            storage_gb = 20000.0 # Developer profile base fallback
+
+        commit_multiplier = (float(committed_pct) if committed_pct else 80.0) / 100.0
+        
+        g_commit = float(gpu_commit_rate) if gpu_commit_rate else 0.0
+        g_burst = float(gpu_burst_rate) if gpu_burst_rate else g_commit
+        s_commit = float(storage_commit_rate) if storage_commit_rate else 0.0
+        
+        # GPU Monthly Operating Calculus (B = 730.5)
+        hours_per_month = 730.5
+        total_gpu_hours = gpus * hours_per_month
+        committed_gpu_hours = total_gpu_hours * commit_multiplier
+        burst_gpu_hours = total_gpu_hours - committed_gpu_hours
+        
+        # Financial Math Execution Layer
+        total_gpu_cost = (committed_gpu_hours * g_commit) + (burst_gpu_hours * g_burst)
+        
+        # REFINED: Storage footprint restricted cleanly to committed capacity scaling
+        billable_storage_gb = storage_gb * commit_multiplier
+        total_storage_cost = billable_storage_gb * s_commit
+        
+        total_monthly_gl_cost = total_gpu_cost + total_storage_cost
+        
+        # Map cost per million if tokens flow natively
+        tokens_m = float(total_monthly_tokens_million) if total_monthly_tokens_million else 0.0
+        gl_cost_per_million_tokens = (total_monthly_gl_cost / tokens_m) if tokens_m > 0 else 0.0
+            
+        return {
+            "gpus_used": int(gpus),
+            "storage_tb_used": round(storage_gb / 1000.0, 1),
+            "billable_storage_tb": round(billable_storage_gb / 1000.0, 1),
+            "total_gpu_hours": round(total_gpu_hours, 2),
+            "committed_gpu_hours": round(committed_gpu_hours, 2),
+            "burst_gpu_hours": round(burst_gpu_hours, 2),
+            "total_gpu_cost": round(total_gpu_cost, 2),
+            "total_storage_cost": round(total_storage_cost, 2),
+            "total_monthly_gl_cost": round(total_monthly_gl_cost, 2),
+            "gl_cost_per_million_tokens": round(gl_cost_per_million_tokens, 4)
+        }
+    except Exception:
+        return {
+            "gpus_used": 2, "storage_tb_used": 20.0, "billable_storage_tb": 16.0,
+            "total_gpu_hours": 1461.0, "committed_gpu_hours": 1168.8, "burst_gpu_hours": 292.2,
+            "total_gpu_cost": 0.0, "total_storage_cost": 0.0, "total_monthly_gl_cost": 0.0,
+            "gl_cost_per_million_tokens": 0.0
+        }
+# --- END OF GREENLAKE CALCULATION ENGINE ---
+

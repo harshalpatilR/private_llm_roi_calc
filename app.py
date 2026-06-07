@@ -1,7 +1,7 @@
 import gradio as gr
 import base64
 import csv
-from modules.calculations import calculate_cloud_costs, format_token_label, calculate_pcai_costs, format_large_number
+from modules.calculations import calculate_cloud_costs, format_token_label, calculate_pcai_costs, format_large_number, calculate_greenlake_metrics
 from ui.styling import HPE_COLORS, CUSTOM_CSS, get_theme
 import pandas as pd 
 
@@ -68,6 +68,133 @@ def load_private_llms(filepath="private-llm.csv"):
 
 TSHIRTS = load_tshirts()
 PRIVATE_LLMS = load_private_llms()
+
+
+# Unchanged top line reference:
+# DEFAULT_MODELS = load_models_from_csv()
+
+# Unchanged top line reference from your app.py:
+# LOGO_DATA = get_base64_img("./images/hpe-element-color.png")
+
+# --- START OF GREENLAKE INCREMENTAL UI CONTROLLER PATCH ---
+#from modules.calculations import calculate_greenlake_metrics
+
+def update_greenlake_ui(*args):
+    # args mapping:
+    # gl_hidden_tshirt_idx (1) + gl_hidden_model_sliders (6) + gl_committed_pct (1) + 4 rates (4) = 12 total
+
+    if len(args) < 6:
+        return "$0.0000", "<p style='color:#6B8099;'>Waiting for data...</p>"
+
+    try:
+        # 1. Fixed parameters
+        selected_idx = int(args[0])
+        committed_pct = args[1]
+        gpu_commit_rate = args[2]
+        gpu_burst_rate = args[3]
+        storage_commit_rate = args[4]
+        storage_burst_rate = args[5]
+        
+        # 2. Variable model instances (The last 6 items)
+        model_instances = list(args[6:]) 
+        
+    except Exception as e:
+        print(f"DEBUG: GreenLake Init Error: {e}")
+        return "$0.0000", f"<p style='color:red;'>Init Error: {e}</p>"
+
+    # Safe T-Shirt data context resolution
+    if 0 <= selected_idx < len(TSHIRTS):
+        target_ts = TSHIRTS[selected_idx]
+    else:
+        return "$0.0000", "<p style='color:#6B8099;'>Please select an active platform node</p>"
+
+    # Capture token velocity dynamically based on model parameter sliders
+    # Mirrors the exact backend parsing order used in calculate_pcai_costs
+    total_tps = 0
+    gpu_info = target_ts.get("GPU Type / Qty", "0x Unknown")
+    gpu_type = "rtx" if "RTX" in gpu_info else "h200"
+    tps_col = f"{gpu_type}_tps_16" # Baseline context lookup
+
+    for idx, model in enumerate(PRIVATE_LLMS):
+        if idx < len(model_instances):
+            instances = model_instances[idx]
+            if instances > 0:
+                tp_val = float(model.get(f"{gpu_type}_tp_16", 1))
+                tps_val = float(model.get(tps_col, 0))
+                total_tps += (instances * tp_val) * tps_val
+
+    # Convert operational TPS to true monthly transaction volume (30.4375 days average scale)
+    tokens_per_month_million = (total_tps * 3600 * 24 * 30.4375) / 1e6
+
+    # Execute financial calculations via our specialized metrics core
+    gl_data = calculate_greenlake_metrics(
+        tshirt_row=target_ts,
+        committed_pct=committed_pct,
+        gpu_commit_rate=gpu_commit_rate,
+        gpu_burst_rate=gpu_burst_rate,
+        storage_commit_rate=storage_commit_rate,
+        total_monthly_tokens_million=tokens_per_month_million
+    )
+
+    cpm_str = f"${gl_data['gl_cost_per_million_tokens']:,.4f} <span class='unit-text'>/ M tokens</span>"
+
+    # Formulate interactive layout template matrix
+    breakdown_html = f"""
+    <div style="overflow-x: auto; width: 100%;">
+        <table style="width:100%; font-size:0.85rem; border-collapse:collapse; color: white; background-color: #1A2744; border-radius: 4px;">
+            <thead>
+                <tr style="border-bottom:2px solid #01A982; text-align:left;">
+                    <th style="padding:10px 8px; background-color: #1A2744; color: #01A982; font-weight:600; white-space: nowrap;">Allocated Resource Parameter</th>
+                    <th style="padding:10px 8px; background-color: #1A2744; color: #01A982; font-weight:600; text-align:right; white-space: nowrap;">Calculated Configuration Value</th>
+                </tr>
+            </thead>
+            <tbody>
+                <tr style="border-bottom: 1px solid #2A3F5C;">
+                    <td style="padding:8px 10px; background-color: #1A2744; color: #CCD2D8; white-space: nowrap;">Physical Compute Footprint</td>
+                    <td style="padding:8px 10px; background-color: #1A2744; text-align:right; color: white;">{gl_data['gpus_used']} GPUs</td>
+                </tr>
+                <tr style="border-bottom: 1px solid #2A3F5C;">
+                    <td style="padding:8px 10px; background-color: #1A2744; color: #CCD2D8; white-space: nowrap;">Total Monthly Allocated GPU-Hours</td>
+                    <td style="padding:8px 10px; background-color: #1A2744; text-align:right; color: white;">{gl_data['total_gpu_hours']:,} Hours</td>
+                </tr>
+                <tr style="border-bottom: 1px solid #2A3F5C;">
+                    <td style="padding:8px 10px; background-color: #1A2744; color: #CCD2D8; white-space: nowrap;">Committed Volume GPU-Hours ({committed_pct}%)</td>
+                    <td style="padding:8px 10px; background-color: #1A2744; text-align:right; color: white;">{gl_data['committed_gpu_hours']:,} Hours</td>
+                </tr>
+                <tr style="border-bottom: 1px solid #2A3F5C;">
+                    <td style="padding:8px 10px; background-color: #1A2744; color: #CCD2D8; white-space: nowrap;">Burst Volume GPU-Hours</td>
+                    <td style="padding:8px 10px; background-color: #1A2744; text-align:right; color: white;">{gl_data['burst_gpu_hours']:,} Hours</td>
+                </tr>
+                <tr style="border-bottom: 1px solid #2A3F5C;">
+                    <td style="padding:8px 10px; background-color: #1A2744; color: #CCD2D8; white-space: nowrap;">Committed Storage Footprint ({committed_pct}%)</td>
+                    <td style="padding:8px 10px; background-color: #1A2744; text-align:right; color: white;">{gl_data['billable_storage_tb']} TB / {gl_data['storage_tb_used']} TB Total</td>
+                </tr>
+                <tr style="border-bottom: 1px solid #2A3F5C;">
+                    <td style="padding:8px 10px; background-color: #1A2744; color: #CCD2D8; white-space: nowrap;">Calculated Total GPU Cost / Month</td>
+                    <td style="padding:8px 10px; background-color: #1A2744; text-align:right; color: white;">${gl_data['total_gpu_cost']:,}</td>
+                </tr>
+                <tr style="border-bottom: 1px solid #2A3F5C;">
+                    <td style="padding:8px 10px; background-color: #1A2744; color: #CCD2D8; white-space: nowrap;">Calculated Storage Cost / Month (No Burst)</td>
+                    <td style="padding:8px 10px; background-color: #1A2744; text-align:right; color: white;">${gl_data['total_storage_cost']:,}</td>
+                </tr>
+                <tr style="border-bottom: 2px solid #01A982; background: rgba(1, 169, 130, 0.1);">
+                    <td style="padding:10px 8px; background-color: #1E2E45; font-weight:600; color: #01A982; white-space: nowrap;">Total GreenLake System Charge / Month</td>
+                    <td style="padding:10px 8px; background-color: #1E2E45; text-align:right; color: #01A982; font-weight: 700;">${gl_data['total_monthly_gl_cost']:,}</td>
+                </tr>
+            </tbody>
+        </table>
+    </div>
+    """
+    return cpm_str, breakdown_html
+# --- END OF GREENLAKE INCREMENTAL UI CONTROLLER PATCH ---
+
+# Unchanged line following the insertion point:
+# with gr.Blocks() as demo:
+
+
+
+# Unchanged bottom line reference:
+# with gr.Blocks(theme=get_theme(), css=CUSTOM_CSS) as demo:
 
 
 # --- START CHANGE 34001: RESTORED HTML FORMATTING ---
@@ -278,6 +405,12 @@ def update_ui(*args):
     # Return 4 values now including the table string
     return cost_str, cpm_str, html_breakdown, table_html    
 
+
+
+
+###### Main UI page
+
+
 with gr.Blocks() as demo:
     # Header
     with gr.Row(elem_classes="hpe-header"):
@@ -389,7 +522,8 @@ with gr.Blocks() as demo:
                     
                     # This hidden component holds the state of which button was clicked
                     selected_tshirt_idx = gr.Number(value=0, visible=False)
-                    
+                    gl_hidden_tshirt_idx = gr.Number(value=0, visible=False)
+
                     with gr.Row():
                         tshirt_buttons = []
                     # Function to update button appearances
@@ -400,7 +534,7 @@ with gr.Blocks() as demo:
                                 new_variant = "primary" if i == idx else "secondary"
                                 updates.append(gr.update(variant=new_variant))
                             # Return the updates + the index for the hidden number
-                            return [*updates, idx]
+                            return [*updates, idx, idx]
 
 
                         for idx, ts in enumerate(TSHIRTS):
@@ -418,28 +552,36 @@ with gr.Blocks() as demo:
 
                             # Hidden index component
                                 selected_tshirt_idx = gr.Number(value=0, visible=False)
-
+                                gl_hidden_tshirt_idx = gr.Number(value=0, visible=False)
+                                
                                 # Set up clicks to trigger the visual update
                                 for idx, btn in enumerate(tshirt_buttons):
                                     btn.click(
                                         fn=on_tshirt_click,
                                         inputs=[gr.State(idx)], # Pass the index of the clicked button
-                                        outputs=tshirt_buttons + [selected_tshirt_idx]
+                                        outputs=tshirt_buttons + [selected_tshirt_idx, gl_hidden_tshirt_idx]
                                     )
 
 
                     gr.Markdown("### 2. Private LLM Model Selection")
                     pcai_model_sliders = []
+                    gl_hidden_model_sliders = []
+
                     for i in range(6):
                         if i < len(PRIVATE_LLMS):
                             m_name = PRIVATE_LLMS[i]['model']
                             with gr.Row():
                                 s = gr.Slider(0, 16, value=1, step=1, label=f"{m_name}", scale=3)
                                 n = gr.Number(value=1, precision=0, scale=1, show_label=False)
+                                gl_slider = gr.Number(value=1, visible=False)
+                                
                                 # Sync slider/number
                                 s.change(lambda x: x, s, n)
                                 n.change(lambda x: x, n, s)
+                                s.change(lambda x: x, s, gl_slider)
+
                                 pcai_model_sliders.append(s)
+                                gl_hidden_model_sliders.append(gl_slider)
                         else:
                             gr.Slider(label="Empty Slot", interactive=False)
                     
@@ -457,7 +599,38 @@ with gr.Blocks() as demo:
                     with gr.Row():
                         capex_price = gr.Number(1500000, label="Capex Price ($)")
                         capex_years = gr.Number(3, label="Amortization Years")
+                    # Unchanged top lines inside Tab 2 layout:
+# capex_years_input = gr.Slider(label="Capex Amortization Period (Years)", minimum=1, maximum=5, step=1, value=3)
+# --- START OF GREENLAKE CONFIGURE FIELDS PATCH ---
+                    gr.HTML("<hr style='border: 1px solid #2A3F5C; margin: 25px 0;'>")
+                    gr.Markdown("### HPE GreenLake Consumption Pricing Parameters")
                     
+                    with gr.Row():
+                        gl_committed_pct = gr.Slider(
+                            label="Committed Hardware Utilization %",
+                            minimum=60, maximum=100, step=5, value=80,
+                            interactive=True
+                        )
+                    
+                    with gr.Row():
+                        with gr.Column(scale=1):
+                            gr.Markdown("<span style='color: #01A982; font-weight:600;'>Committed Base Rates</span>")
+                            gl_gpu_commit_rate = gr.Number(label="GPU Commit Rate ($/GPU-Hour)", value=2.50, interactive=True)
+                            gl_storage_commit_rate = gr.Number(label="Storage Commit Rate ($/GB-Month)", value=0.12, interactive=True)
+                            
+                        with gr.Column(scale=1):
+                            gr.Markdown("<span style='color: #6B8099; font-weight:600;'>Burst Capacity Rates</span>")
+                            gl_gpu_burst_rate = gr.Number(label="GPU Burst Rate ($/GPU-Hour)", value=2.50, interactive=True)
+                            gl_storage_burst_rate = gr.Number(label="Storage Burst Rate ($/GB-Month)", value=0.12, interactive=True)
+
+                    # Auto-Sync Hooks: Binds burst rates to equal committed values by default
+                    gl_gpu_commit_rate.change(lambda v: v, inputs=[gl_gpu_commit_rate], outputs=[gl_gpu_burst_rate])
+                    gl_storage_commit_rate.change(lambda v: v, inputs=[gl_storage_commit_rate], outputs=[gl_storage_burst_rate])
+# --- END OF GREENLAKE CONFIGURE FIELDS PATCH ---
+# Unchanged bottom lines inside Tab 2 layout:
+# with gr.Column():
+#     gr.Markdown("### 📈 Sizing Results")
+
                     # with gr.Accordion("GreenLake Consumption (Future)", open=False):
                     #     gr.Number(label="Monthly Base", interactive=False)
                     #     gr.Slider(label="Commit %", interactive=False)
@@ -520,9 +693,28 @@ with gr.Blocks() as demo:
                         pcai_total_tokens = gr.Markdown("## 0", elem_classes="stat-card")
                         pcai_cpm = gr.Markdown("$0.00 / M tokens", elem_classes=["stat-card", "green-text"])
                     
+                    # --- START OF GREENLAKE DISPLAY PANEL PATCH ---
+                    with gr.Row(elem_classes=["metric-card-row"]):
+                        gl_token_cost_output = gr.Number(
+                            label="HPE GreenLake Cost / Million Tokens ($)", 
+                            precision=4, 
+                            interactive=False
+                        )
+            
+
                     pcai_breakdown_viz = gr.HTML()
                     with gr.Accordion("Sizing Details", open=False):
                         pcai_sizing_table = gr.HTML()
+
+# --- START OF GREENLAKE OUTPUT VISUALS PATCH ---
+                    gr.Markdown("### GreenLake Consumption Results")
+                    with gr.Group():
+                        gl_cpm_output = gr.HTML("<div class='green-text'>$0.0000 <span class='unit-text'>/ M tokens</span></div>")
+                        
+                    with gr.Accordion("Detailed GreenLake Calculation Parameter Breakdown", open=True):
+                        detailed_gl_calc_breakdown = gr.HTML()
+# --- END OF GREENLAKE OUTPUT VISUALS PATCH ---
+
 
             
         with gr.Tab("Compare"):
@@ -597,8 +789,8 @@ with gr.Blocks() as demo:
     pcai_outputs = [pcai_total_tokens, pcai_cpm, pcai_breakdown_viz, pcai_sizing_table]
 
     # 1. Combined Master Lists
-    global_inputs = all_inputs + pcai_inputs
-    global_outputs = all_outputs + pcai_outputs
+    #global_inputs = all_inputs + pcai_inputs
+    #global_outputs = all_outputs + pcai_outputs
 
     # --- START CHANGE 28001: FIX PCAI RADIO INTERACTIVITY ---
 
@@ -636,32 +828,32 @@ with gr.Blocks() as demo:
 
 
     # --- START CHANGE 21001: CLEAN IDENTITY MAPPING ---
-
-    def refresh_all_tabs(*data):
-        """
-        *data receives all 27+ inputs as a flat tuple from Gradio.
-        We then use your pre-defined lists to map those values back to 
-        the specific components each tab logic expects.
-        """
-        # 1. Create a lookup dictionary: {Component_Object: Current_Value}
-        # zip() pairs your global_inputs list with the live data from the browser
-        data_map = {comp: val for comp, val in zip(global_inputs, data)}
+    # working tab2 - capex
+    # def refresh_all_tabs(*data):
+    #     """
+    #     *data receives all 27+ inputs as a flat tuple from Gradio.
+    #     We then use your pre-defined lists to map those values back to 
+    #     the specific components each tab logic expects.
+    #     """
+    #     # 1. Create a lookup dictionary: {Component_Object: Current_Value}
+    #     # zip() pairs your global_inputs list with the live data from the browser
+    #     data_map = {comp: val for comp, val in zip(global_inputs, data)}
         
-        # 2. Extract values for Tab 1 (Cloud API)
-        # This rebuilds the exact list order update_ui() expects
-        cloud_vals = [data_map[comp] for comp in all_inputs]
+    #     # 2. Extract values for Tab 1 (Cloud API)
+    #     # This rebuilds the exact list order update_ui() expects
+    #     cloud_vals = [data_map[comp] for comp in all_inputs]
         
-        # 3. Extract values for Tab 2 (Private Cloud AI)
-        # This rebuilds the exact list order update_pcai_ui() expects
-        pcai_vals = [data_map[comp] for comp in pcai_inputs]
+    #     # 3. Extract values for Tab 2 (Private Cloud AI)
+    #     # This rebuilds the exact list order update_pcai_ui() expects
+    #     pcai_vals = [data_map[comp] for comp in pcai_inputs]
         
-        # 4. Execute both logic functions
-        cloud_results = update_ui(*cloud_vals)
-        pcai_results = update_pcai_ui(*pcai_vals)
+    #     # 4. Execute both logic functions
+    #     cloud_results = update_ui(*cloud_vals)
+    #     pcai_results = update_pcai_ui(*pcai_vals)
         
-        # 5. Return one unified tuple of results to Gradio
-        # Order matches: [cloud_outputs...] + [pcai_outputs...]
-        return (*cloud_results, *pcai_results)
+    #     # 5. Return one unified tuple of results to Gradio
+    #     # Order matches: [cloud_outputs...] + [pcai_outputs...]
+    #     return (*cloud_results, *pcai_results)
 
     # # 4. Set the trigger
     # refresh_btn.click(
@@ -670,7 +862,134 @@ with gr.Blocks() as demo:
     #     outputs=global_outputs
     # )
 
-    # --- END CHANGE 21001 ---
+# --- START OF GREENLAKE EVENT DEPENDENCY REGISTRATION PATCH ---
+ 
+    greenlake_interactive_inputs = [
+        gl_hidden_tshirt_idx,
+    ] + gl_hidden_model_sliders + [
+        gl_committed_pct, 
+        gl_gpu_commit_rate, 
+        gl_gpu_burst_rate, 
+        gl_storage_commit_rate, 
+        gl_storage_burst_rate
+    ]
+    
+    greenlake_ui_outputs = [
+        gl_cpm_output, 
+        detailed_gl_calc_breakdown
+    ]
+
+    # 2. Update Master Tracking Lists
+    # Fixed parameters first, variable lists last
+    greenlake_fixed_params = [gl_committed_pct, gl_gpu_commit_rate, gl_gpu_burst_rate, gl_storage_commit_rate, gl_storage_burst_rate]
+
+    # MUST match this sequence EXACTLY in the unpacker below
+    greenlake_interactive_inputs = [gl_hidden_tshirt_idx] + greenlake_fixed_params + gl_hidden_model_sliders
+    
+    global_inputs = all_inputs + pcai_inputs + greenlake_interactive_inputs
+    global_outputs = all_outputs + pcai_outputs + greenlake_ui_outputs
+
+
+# 3. Bind changes to immediately run calculations for the GreenLake Tab
+    # Update when visible PCAI components are adjusted
+    selected_tshirt_idx.change(
+        fn=update_greenlake_ui,
+        inputs=greenlake_interactive_inputs,
+        outputs=greenlake_ui_outputs
+    )
+    for component in pcai_model_sliders:
+        component.change(
+            fn=update_greenlake_ui,
+            inputs=greenlake_interactive_inputs,
+            outputs=greenlake_ui_outputs
+        )
+
+    # Update when native GreenLake inputs are adjusted
+    gl_native_inputs = [
+        gl_committed_pct, 
+        gl_gpu_commit_rate, 
+        gl_gpu_burst_rate, 
+        gl_storage_commit_rate, 
+        gl_storage_burst_rate
+    ]
+    for component in gl_native_inputs:
+        component.change(
+            fn=update_greenlake_ui,
+            inputs=greenlake_interactive_inputs,
+            outputs=greenlake_ui_outputs
+        )
+
+# --- END OF GREENLAKE EVENT DEPENDENCY REGISTRATION PATCH ---
+
+
+# --- END OF GREENLAKE EVENT DEPENDENCY REGISTRATION PATCH ---
+# --- START CHANGE: RECONCILED MULTI-TAB REFRESH SYSTEM ---
+    DEBUG_REFRESH_TABS = True  # Set to False later to turn off terminal logs
+
+    def refresh_all_tabs(*data):
+        """
+        *data receives all inputs as a flat tuple from Gradio.
+        Instead of looking up components by variable identity (which fails due to duplicates),
+        this steps through the incoming *data tuple sequentially in the exact order of global_inputs.
+        """
+        if DEBUG_REFRESH_TABS:
+            print("\n=== 🔍 DEBUG START: refresh_all_tabs ===")
+            print(f"Total elements received from frontend (*data): {len(data)}")
+        
+        # Track our position in the flat incoming data tuple sequentially
+        data_idx = 0
+        
+        # 1. Extract values for Tab 1 (Cloud API)
+        cloud_vals = []
+        for comp in all_inputs:
+            cloud_vals.append(data[data_idx])
+            data_idx += 1
+            
+        # 2. Extract values for Tab 2 (Private Cloud AI)
+        pcai_vals = []
+        for comp in pcai_inputs:
+            pcai_vals.append(data[data_idx])
+            data_idx += 1
+
+        # 3. Extract values for Tab 3 (GreenLake Consumption)
+        greenlake_vals = []
+        for comp in greenlake_interactive_inputs:
+            greenlake_vals.append(data[data_idx])
+            data_idx += 1
+
+        if DEBUG_REFRESH_TABS:
+            print(f"Sequential Unpack -> Cloud: {len(cloud_vals)} | PCAI: {len(pcai_vals)} | GreenLake: {len(greenlake_vals)}")
+            print("Executing update_ui()...")
+            
+        # 4. Execute all three backend calculation logic blocks
+        cloud_results = update_ui(*cloud_vals)
+        
+        if DEBUG_REFRESH_TABS:
+            print(f"Returned from update_ui(): {len(cloud_results)} metrics")
+            print("Executing update_pcai_ui()...")
+            
+        pcai_results = update_pcai_ui(*pcai_vals)
+
+        if DEBUG_REFRESH_TABS:
+            print(f"Returned from update_pcai_ui(): {len(pcai_results)} metrics")
+            print("Executing update_greenlake_ui()...")
+            
+        greenlake_results = update_greenlake_ui(*greenlake_vals)
+        
+        if DEBUG_REFRESH_TABS:
+            print(f"Returned from update_greenlake_ui(): {len(greenlake_results)} metrics")
+        
+        # 5. Return one unified tuple of all 10 results back to Gradio layout targets
+        final_out = (*cloud_results, *pcai_results, *greenlake_results)
+        
+        if DEBUG_REFRESH_TABS:
+            print(f"Total outputs ready to return to Gradio: {len(final_out)}")
+            print("=== 🔍 DEBUG END: refresh_all_tabs ===\n")
+        
+        return final_out
+
+# # Simulate the click automatically 500ms after the page finishes loading
+
 
     # 3. Update the Global Refresh Button
     refresh_btn.click(

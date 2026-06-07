@@ -211,6 +211,35 @@ body, .gradio-container {{
         border-radius: 4px !important;
     }}
 
+
+
+/* --- START OF GREENLAKE DASHBOARD STYLING PATCH --- */
+.metric-card-row {{
+    margin-bottom: 12px !important;
+    gap: 12px !important;
+}}
+
+.metric-card-row .gradio-number {{
+    background-color: #1A2744 !important;
+    border: 1px solid #2A3F5C !important;
+    border-radius: 6px !important;
+}}
+
+.metric-card-row label span {{
+    color: #CCD2D8 !important;
+    font-weight: 600 !important;
+    font-size: 0.85rem !important;
+}}
+
+.metric-card-row input {{
+    color: #01A982 !important;
+    font-size: 1.6rem !important;
+    font-weight: 700 !important;
+    font-family: monospace !important;
+    background-color: #1A2744 !important;
+    text-align: left !important;
+}}
+/* --- END OF GREENLAKE DASHBOARD STYLING PATCH --- */
 """
 
 
