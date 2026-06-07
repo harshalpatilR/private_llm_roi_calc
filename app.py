@@ -136,7 +136,9 @@ def update_greenlake_ui(*args):
         total_monthly_tokens_million=tokens_per_month_million
     )
 
-    cpm_str = f"${gl_data['gl_cost_per_million_tokens']:,.4f} <span class='unit-text'>/ M tokens</span>"
+    #cpm_str = f"${gl_data['gl_cost_per_million_tokens']:,.4f} <span class='unit-text'>/ M tokens</span>"
+    #cpm_str = f"<div class='green-text'>${gl_data['gl_cost_per_million_tokens']:,.2f} <span class='unit-text'>/ M tokens</span></div>"
+    cpm_str = f"${gl_data['gl_cost_per_million_tokens']:,.2f} <span class='unit-text'>/ M tokens</span>"
 
     # Formulate interactive layout template matrix
     breakdown_html = f"""
@@ -238,11 +240,17 @@ def update_pcai_ui(*args):
     total_tps = sum(b['total_tps'] for b in breakdown)
     tokens_per_day = total_tps * 3600 * work_hours
     
-    #token_str = format_large_number(tokens_per_day)
+    token_str = format_large_number(tokens_per_day)
     token_str = f"{format_large_number(tokens_per_day)} <span class='unit-text'>tokens per day</span>"
+    
     #cpm_str = f"${cpm:,.2f} / M tokens"
     cpm_str = f"${cpm:,.2f} <span class='unit-text'>/ M tokens</span>"
     
+    #formatted_tokens = format_large_number(tokens_per_day)
+    #token_str = f"<div class='stat-card'>{formatted_tokens}</div>"
+
+    #cpm_str = f"<div class='green-text'>${cpm:,.2f} <span class='unit-text'>/ M tokens</span></div>"
+
     # 6. Generate Visual Breakdown HTML
     breakdown_html = "<div style='display: flex; flex-direction: column; gap: 12px;'>"
     for b in breakdown:
@@ -523,19 +531,35 @@ with gr.Blocks() as demo:
                     # This hidden component holds the state of which button was clicked
                     selected_tshirt_idx = gr.Number(value=0, visible=False)
                     gl_hidden_tshirt_idx = gr.Number(value=0, visible=False)
+                    tshirt_buttons = []
+
+
+                    def create_click_handler(idx):
+                        def handler():
+                            # Generate updates for buttons
+                            updates = [gr.update(variant="primary" if i == idx else "secondary") for i in range(len(TSHIRTS))]
+                            # Return updates + the raw integer index for the number components
+                            return updates + [idx, idx]
+                        return handler
+
+                    def on_tshirt_click(idx):
+                        """
+                        Updates button variants and returns raw index values for hidden Number components.
+                        """
+                        # 1. Create a list of updates for your buttons (one per T-shirt)
+                        # This generates a list like: [gr.update(variant='secondary'), gr.update(variant='primary'), ...]
+                        button_updates = [
+                            gr.update(variant="primary" if i == idx else "secondary") 
+                            for i in range(len(TSHIRTS))
+                        ]
+                        
+                        # 2. Return the button updates + the raw integer index for the two Number components.
+                        # IMPORTANT: We do NOT use gr.update() for the Number components.
+                        # Just return the integer value directly so Gradio sets the value correctly.
+                        return button_updates + [idx, idx]
 
                     with gr.Row():
-                        tshirt_buttons = []
                     # Function to update button appearances
-                        def on_tshirt_click(idx):
-                            # Returns an array of updates for each button
-                            updates = []
-                            for i in range(len(TSHIRTS)):
-                                new_variant = "primary" if i == idx else "secondary"
-                                updates.append(gr.update(variant=new_variant))
-                            # Return the updates + the index for the hidden number
-                            return [*updates, idx, idx]
-
 
                         for idx, ts in enumerate(TSHIRTS):
                             with gr.Column(min_width=150):
@@ -549,16 +573,12 @@ with gr.Blocks() as demo:
                                 # When clicked, update the hidden Number component
                                 #btn.click(lambda i=idx: i, None, selected_tshirt_idx)
                                 tshirt_buttons.append(btn)
-
-                            # Hidden index component
-                                selected_tshirt_idx = gr.Number(value=0, visible=False)
-                                gl_hidden_tshirt_idx = gr.Number(value=0, visible=False)
                                 
                                 # Set up clicks to trigger the visual update
                                 for idx, btn in enumerate(tshirt_buttons):
                                     btn.click(
-                                        fn=on_tshirt_click,
-                                        inputs=[gr.State(idx)], # Pass the index of the clicked button
+                                        fn=create_click_handler(idx),
+                                        inputs=None, # gr.State(idx) Pass the index of the clicked button
                                         outputs=tshirt_buttons + [selected_tshirt_idx, gl_hidden_tshirt_idx]
                                     )
 
@@ -692,14 +712,17 @@ with gr.Blocks() as demo:
                     with gr.Group():
                         pcai_total_tokens = gr.Markdown("## 0", elem_classes="stat-card")
                         pcai_cpm = gr.Markdown("$0.00 / M tokens", elem_classes=["stat-card", "green-text"])
+                        #pcai_total_tokens = gr.HTML("<div class='stat-card'>0</div>")
+                        #pcai_cpm = gr.HTML("<div class='green-text'>$0.00 <span class='unit-text'>/ M tokens</span></div>")
                     
                     # --- START OF GREENLAKE DISPLAY PANEL PATCH ---
                     with gr.Row(elem_classes=["metric-card-row"]):
-                        gl_token_cost_output = gr.Number(
-                            label="HPE GreenLake Cost / Million Tokens ($)", 
-                            precision=4, 
-                            interactive=False
-                        )
+                        # gl_token_cost_output = gr.Number(
+                        #     label="HPE GreenLake Cost / Million Tokens ($)", 
+                        #     precision=4, 
+                        #     interactive=False
+                        # )
+                        gl_cpm_output = gr.Markdown(value="$0.00 / M tokens", elem_classes=["stat-card", "green-text"])
             
 
                     pcai_breakdown_viz = gr.HTML()
@@ -709,8 +732,8 @@ with gr.Blocks() as demo:
 # --- START OF GREENLAKE OUTPUT VISUALS PATCH ---
                     gr.Markdown("### GreenLake Consumption Results")
                     with gr.Group():
-                        gl_cpm_output = gr.HTML("<div class='green-text'>$0.0000 <span class='unit-text'>/ M tokens</span></div>")
-                        
+                        #gl_cpm_output = gr.HTML("<div class='green-text'>$0.00 <span class='unit-text'>/ M tokens</span></div>")
+                        gl_cpm_output = gr.Markdown(value="$0.00 / M tokens", elem_classes=["stat-card", "green-text"])
                     with gr.Accordion("Detailed GreenLake Calculation Parameter Breakdown", open=True):
                         detailed_gl_calc_breakdown = gr.HTML()
 # --- END OF GREENLAKE OUTPUT VISUALS PATCH ---
