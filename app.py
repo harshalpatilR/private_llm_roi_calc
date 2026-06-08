@@ -8,7 +8,11 @@ import pandas as pd
 
 # GLOBALS for passing values
 GLOBAL_TOKENS_PER_DAY = 0
-
+GLOBAL_FINAL_RESULTS_REGISTRY = {
+    "public_cloud": {"tokens": 0, "cost": 0, "cpm": 0},
+    "pcai_capex": {"tokens": 0, "cost": 0, "cpm": 0},
+    "pcai_greenlake": {"tokens": 0, "cost": 0, "cpm": 0}
+}
 
 # --- START CHANGE 4001: CSV DATA LOADER ---
 def load_models_from_csv(filepath="public_models.csv"):
@@ -88,6 +92,7 @@ def update_greenlake_ui(*args):
     # gl_hidden_tshirt_idx (1) + gl_hidden_model_sliders (6) + gl_committed_pct (1) + 4 rates (4) = 12 total
 
     global GLOBAL_TOKENS_PER_DAY
+    global GLOBAL_FINAL_RESULTS_REGISTRY
 
     if len(args) < 6:
         return "$0.0000", "<p style='color:#6B8099;'>Waiting for data...</p>"
@@ -132,6 +137,8 @@ def update_greenlake_ui(*args):
 
     # Convert operational TPS to true monthly transaction volume (30.4375 days average scale)
     tokens_per_month_million = GLOBAL_TOKENS_PER_DAY
+
+
     #(total_tps * 3600 * 24 * 30.4375) / 1e6
 
     # # Execute financial calculations via our specialized metrics core
@@ -160,6 +167,13 @@ def update_greenlake_ui(*args):
     #cpm_str = f"${gl_data['gl_cost_per_million_tokens']:,.4f} <span class='unit-text'>/ M tokens</span>"
     #cpm_str = f"<div class='green-text'>${gl_data['gl_cost_per_million_tokens']:,.2f} <span class='unit-text'>/ M tokens</span></div>"
     cpm_str = f"${gl_data['gl_cost_per_million_tokens']:,.2f} <span class='unit-text'>/ M tokens</span>"
+
+    GLOBAL_FINAL_RESULTS_REGISTRY["pcai_greenlake"] = {
+            "tokens": tokens_per_month_million, 
+            "cost": gl_data['total_gpu_cost'] + gl_data['total_storage_cost'], 
+            "cpm": gl_data['gl_cost_per_million_tokens']
+        }
+
 
     # Formulate interactive layout template matrix
     breakdown_html = f"""
@@ -232,6 +246,7 @@ def update_pcai_ui(*args):
              capex_price, capex_years] + pcai_model_sliders
     """
     global GLOBAL_TOKENS_PER_DAY
+    global GLOBAL_FINAL_RESULTS_REGISTRY
 
     try:
         # 1. Unpack Fixed Positions (Index 0-5)
@@ -262,6 +277,7 @@ def update_pcai_ui(*args):
     )
     total_tokens_annual, cpm, breakdown, error_msg, used_gpu, avail_gpu = results
 
+
     # 5. Format Metric Strings
     # Calculate tokens_per_day specifically for the primary UI display
     total_tps = sum(b['total_tps'] for b in breakdown)
@@ -274,6 +290,12 @@ def update_pcai_ui(*args):
 
     # assign global
     GLOBAL_TOKENS_PER_DAY = tokens_per_day
+    GLOBAL_FINAL_RESULTS_REGISTRY["pcai_capex"] = {
+    "tokens": tokens_per_day, 
+    "cost": (capex_val / (capex_years * 12)), 
+    "cpm": cpm
+    }
+
     cpm_str = f"${cpm:,.2f} <span class='unit-text'>/ M tokens</span>"
     
     #formatted_tokens = format_large_number(tokens_per_day)
@@ -358,6 +380,8 @@ TOKEN_STEPS = [1e7, 5e7, 1e8, 5e8, 1e9, 5e9, 1e10, 5e10, 1e11, 1e12]
 TOKEN_LABELS = ["10M", "50M", "100M", "500M", "1B", "5B", "10B", "50B", "100B", "1T"]
 
 def update_ui(*args):
+    global GLOBAL_FINAL_RESULTS_REGISTRY
+
 # Safety check: if inputs are missing, return default strings
     if args[0] is None:
         return "$0", "$0.00 / M tokens", "", ""
@@ -381,6 +405,13 @@ def update_ui(*args):
 
     total_cost, cpm, breakdown = calculate_cloud_costs(total_tokens, in_pct, out_pct, models)
     
+    # update for summary tab3
+    GLOBAL_FINAL_RESULTS_REGISTRY["public_cloud"] = {
+        "tokens": total_tokens, 
+        "cost": total_cost, 
+        "cpm": cpm
+    }
+
     # Format labels
     cost_str = f"${total_cost:,.0f}"
     #cpm_str = f"${cpm:,.2f} / M tokens"
@@ -443,7 +474,54 @@ def update_ui(*args):
     # Return 4 values now including the table string
     return cost_str, cpm_str, html_breakdown, table_html    
 
+### Tab3
+# def get_tab3_comparison():
+#     global GLOBAL_FINAL_RESULTS_REGISTRY
+#     data = []
+#     for key, val in GLOBAL_FINAL_RESULTS_REGISTRY.items():
+#         # Formatting the strings for the display table
+#         data.append([
+#             key.replace("_", " ").title(),
+#             f"{val['tokens']:,.0f}",
+#             f"${val['cost']:,.0f}",
+#             f"${val['cpm']:.2f}"
+#         ])
+#     return data
 
+def get_tab3_comparison():
+    global GLOBAL_FINAL_RESULTS_REGISTRY
+    
+    # CSS: Matching your GreenLake table style precisely
+    html = """
+    <div style="overflow-x: auto; width: 100%;">
+        <table style="width: 100%; font-size: 16px; border-collapse: collapse; color: white; background-color: #1A2744; border-radius: 4px;">
+            <thead>
+                <tr style="border-bottom: 2px solid #01A982; text-align: left;">
+                    <th style="padding: 12px; background-color: #1A2744; color: #01A982; font-weight: 600;">Consumption Model</th>
+                    <th style="padding: 12px; background-color: #1A2744; color: #01A982; font-weight: 600; text-align: right;">Monthly Tokens</th>
+                    <th style="padding: 12px; background-color: #1A2744; color: #01A982; font-weight: 600; text-align: right;">Monthly Cost</th>
+                    <th style="padding: 12px; background-color: #1A2744; color: #01A982; font-weight: 600; text-align: right;">CPM</th>
+                </tr>
+            </thead>
+            <tbody>
+    """
+    
+    for key, val in GLOBAL_FINAL_RESULTS_REGISTRY.items():
+        name = key.replace("_", " ").title().replace("Pcai", "PCAI")
+        formatted_tokens = format_large_number(val['tokens'])
+        cpm_str = f"<span style='color: #01A982; font-weight: 700;'>${val['cpm']:,.2f}</span> <span style='font-size: 0.85em; color: #CCD2D8;'>/ M tokens</span>"
+        
+        html += f"""
+        <tr style="border-bottom: 1px solid #2A3F5C;">
+            <td style="padding: 12px; background-color: #1A2744; color: white; font-weight: 500;">{name}</td>
+            <td style="padding: 12px; background-color: #1A2744; text-align: right; color: #CCD2D8;">{formatted_tokens}</td>
+            <td style="padding: 12px; background-color: #1A2744; text-align: right; color: white;">${val['cost']:,.0f}</td>
+            <td style="padding: 12px; background-color: #1A2744; text-align: right;">{cpm_str}</td>
+        </tr>
+        """
+        
+    html += "</tbody></table></div>"
+    return html
 
 
 ###### Main UI page
@@ -666,13 +744,13 @@ with gr.Blocks() as demo:
                     with gr.Row():
                         with gr.Column(scale=1):
                             gr.Markdown("<span style='color: #01A982; font-weight:600;'>Committed Base Rates</span>")
-                            gl_gpu_commit_rate = gr.Number(label="GPU Commit Rate ($/GPU-Hour)", value=2.50, interactive=True)
-                            gl_storage_commit_rate = gr.Number(label="Storage Commit Rate ($/GB-Month)", value=0.12, interactive=True)
+                            gl_gpu_commit_rate = gr.Number(label="GPU Commit Rate ($/GPU-Hour)", value=11.31, interactive=True)
+                            gl_storage_commit_rate = gr.Number(label="Storage Commit Rate ($/GB-Month)", value=0.7533, interactive=True)
                             
                         with gr.Column(scale=1):
                             gr.Markdown("<span style='color: #6B8099; font-weight:600;'>Burst Capacity Rates</span>")
-                            gl_gpu_burst_rate = gr.Number(label="GPU Burst Rate ($/GPU-Hour)", value=2.50, interactive=True)
-                            gl_storage_burst_rate = gr.Number(label="Storage Burst Rate ($/GB-Month)", value=0.12, interactive=True)
+                            gl_gpu_burst_rate = gr.Number(label="GPU Burst Rate ($/GPU-Hour)", value=11.31, interactive=True)
+                            gl_storage_burst_rate = gr.Number(label="Storage Burst Rate ($/GB-Month)", value=0.7533, interactive=True)
 
                     # Auto-Sync Hooks: Binds burst rates to equal committed values by default
                     gl_gpu_commit_rate.change(lambda v: v, inputs=[gl_gpu_commit_rate], outputs=[gl_gpu_burst_rate])
@@ -772,7 +850,12 @@ with gr.Blocks() as demo:
 
             
         with gr.Tab("Compare"):
-            gr.Markdown("### TCO Comparison\n*Section under development*")
+            #gr.Markdown("### TCO Comparison\n*Section under development*")
+            with gr.Tab("Strategic Comparison"):
+                comparison_table = gr.HTML(
+                value=get_tab3_comparison(),
+                label="TCO & Efficiency Comparison"
+            )
 
     # Footer
     gr.Markdown("""
@@ -942,7 +1025,7 @@ with gr.Blocks() as demo:
     greenlake_interactive_inputs = [gl_hidden_tshirt_idx] + greenlake_fixed_params + gl_hidden_model_sliders
     
     global_inputs = all_inputs + pcai_inputs + greenlake_interactive_inputs
-    global_outputs = all_outputs + pcai_outputs + greenlake_ui_outputs
+    global_outputs = all_outputs + pcai_outputs + greenlake_ui_outputs + [comparison_table]
 
 
 # 3. Bind changes to immediately run calculations for the GreenLake Tab
@@ -1049,8 +1132,12 @@ with gr.Blocks() as demo:
         if DEBUG_REFRESH_TABS:
             print(f"Returned from update_greenlake_ui(): {len(greenlake_results)} metrics")
         
+
+        new_table_data = get_tab3_comparison()
+
+
         # 5. Return one unified tuple of all 10 results back to Gradio layout targets
-        final_out = (*cloud_results, *pcai_results, *greenlake_results)
+        final_out = (*cloud_results, *pcai_results, *greenlake_results, new_table_data)
         
         if DEBUG_REFRESH_TABS:
             print(f"Total outputs ready to return to Gradio: {len(final_out)}")
