@@ -6,6 +6,10 @@ from ui.styling import HPE_COLORS, CUSTOM_CSS, get_theme
 import pandas as pd 
 
 
+# GLOBALS for passing values
+GLOBAL_TOKENS_PER_DAY = 0
+
+
 # --- START CHANGE 4001: CSV DATA LOADER ---
 def load_models_from_csv(filepath="public_models.csv"):
     models = []
@@ -83,6 +87,8 @@ def update_greenlake_ui(*args):
     # args mapping:
     # gl_hidden_tshirt_idx (1) + gl_hidden_model_sliders (6) + gl_committed_pct (1) + 4 rates (4) = 12 total
 
+    global GLOBAL_TOKENS_PER_DAY
+
     if len(args) < 6:
         return "$0.0000", "<p style='color:#6B8099;'>Waiting for data...</p>"
 
@@ -94,9 +100,10 @@ def update_greenlake_ui(*args):
         gpu_burst_rate = args[3]
         storage_commit_rate = args[4]
         storage_burst_rate = args[5]
+        precision    = args[6] ## added
         
         # 2. Variable model instances (The last 6 items)
-        model_instances = list(args[6:]) 
+        model_instances = list(args[7:]) 
         
     except Exception as e:
         print(f"DEBUG: GreenLake Init Error: {e}")
@@ -124,16 +131,30 @@ def update_greenlake_ui(*args):
                 total_tps += (instances * tp_val) * tps_val
 
     # Convert operational TPS to true monthly transaction volume (30.4375 days average scale)
-    tokens_per_month_million = (total_tps * 3600 * 24 * 30.4375) / 1e6
+    tokens_per_month_million = GLOBAL_TOKENS_PER_DAY
+    #(total_tps * 3600 * 24 * 30.4375) / 1e6
 
-    # Execute financial calculations via our specialized metrics core
+    # # Execute financial calculations via our specialized metrics core
+    # gl_data = calculate_greenlake_metrics(
+    #     tshirt_row=target_ts,
+    #     committed_pct=committed_pct,
+    #     gpu_commit_rate=gpu_commit_rate,
+    #     gpu_burst_rate=gpu_burst_rate,
+    #     storage_commit_rate=storage_commit_rate,
+    #     total_monthly_tokens_million=tokens_per_month_million
+    # )
+
     gl_data = calculate_greenlake_metrics(
         tshirt_row=target_ts,
+        model_instances=model_instances,
         committed_pct=committed_pct,
         gpu_commit_rate=gpu_commit_rate,
         gpu_burst_rate=gpu_burst_rate,
         storage_commit_rate=storage_commit_rate,
-        total_monthly_tokens_million=tokens_per_month_million
+        storage_burst_rate=storage_burst_rate, # Ensure your signature matches
+        precision=precision,                   # INJECTED PATCH
+        private_llm_benchmarks=PRIVATE_LLMS, # <--- Add this
+        total_monthly_tokens_million=(GLOBAL_TOKENS_PER_DAY/1e6)
     )
 
     #cpm_str = f"${gl_data['gl_cost_per_million_tokens']:,.4f} <span class='unit-text'>/ M tokens</span>"
@@ -151,6 +172,10 @@ def update_greenlake_ui(*args):
                 </tr>
             </thead>
             <tbody>
+                <tr style="border-bottom: 1px solid #2A3F5C;">
+                    <td style="padding:8px 10px; background-color: #1A2744; color: #CCD2D8; white-space: nowrap;">Required Compute Capacity</td>
+                    <td style="padding:8px 10px; background-color: #1A2744; text-align:right; color: white;">{gl_data['required_gpus']} GPUs</td>
+                </tr>
                 <tr style="border-bottom: 1px solid #2A3F5C;">
                     <td style="padding:8px 10px; background-color: #1A2744; color: #CCD2D8; white-space: nowrap;">Physical Compute Footprint</td>
                     <td style="padding:8px 10px; background-color: #1A2744; text-align:right; color: white;">{gl_data['gpus_used']} GPUs</td>
@@ -206,6 +231,8 @@ def update_pcai_ui(*args):
     Inputs: [selected_tshirt_idx (int), precision_radio, work_hours, work_days, 
              capex_price, capex_years] + pcai_model_sliders
     """
+    global GLOBAL_TOKENS_PER_DAY
+
     try:
         # 1. Unpack Fixed Positions (Index 0-5)
         # Using the index from the button click logic
@@ -244,6 +271,9 @@ def update_pcai_ui(*args):
     token_str = f"{format_large_number(tokens_per_day)} <span class='unit-text'>tokens per day</span>"
     
     #cpm_str = f"${cpm:,.2f} / M tokens"
+
+    # assign global
+    GLOBAL_TOKENS_PER_DAY = tokens_per_day
     cpm_str = f"${cpm:,.2f} <span class='unit-text'>/ M tokens</span>"
     
     #formatted_tokens = format_large_number(tokens_per_day)
@@ -531,6 +561,7 @@ with gr.Blocks() as demo:
                     # This hidden component holds the state of which button was clicked
                     selected_tshirt_idx = gr.Number(value=0, visible=False)
                     gl_hidden_tshirt_idx = gr.Number(value=0, visible=False)
+                    gl_hidden_precision = gr.Number(value=16, visible=False)
                     tshirt_buttons = []
 
 
@@ -716,13 +747,13 @@ with gr.Blocks() as demo:
                         #pcai_cpm = gr.HTML("<div class='green-text'>$0.00 <span class='unit-text'>/ M tokens</span></div>")
                     
                     # --- START OF GREENLAKE DISPLAY PANEL PATCH ---
-                    with gr.Row(elem_classes=["metric-card-row"]):
+                    #with gr.Row(elem_classes=["metric-card-row"]):
                         # gl_token_cost_output = gr.Number(
                         #     label="HPE GreenLake Cost / Million Tokens ($)", 
                         #     precision=4, 
                         #     interactive=False
                         # )
-                        gl_cpm_output = gr.Markdown(value="$0.00 / M tokens", elem_classes=["stat-card", "green-text"])
+                        #gl_cpm_output = gr.Markdown(value="$0.00 / M tokens", elem_classes=["stat-card", "green-text"])
             
 
                     pcai_breakdown_viz = gr.HTML()
@@ -887,15 +918,16 @@ with gr.Blocks() as demo:
 
 # --- START OF GREENLAKE EVENT DEPENDENCY REGISTRATION PATCH ---
  
-    greenlake_interactive_inputs = [
-        gl_hidden_tshirt_idx,
-    ] + gl_hidden_model_sliders + [
-        gl_committed_pct, 
-        gl_gpu_commit_rate, 
-        gl_gpu_burst_rate, 
-        gl_storage_commit_rate, 
-        gl_storage_burst_rate
-    ]
+    # greenlake_interactive_inputs = [
+    #     gl_hidden_tshirt_idx,
+    # ] + gl_hidden_model_sliders + [
+    #     gl_committed_pct, 
+    #     gl_gpu_commit_rate, 
+    #     gl_gpu_burst_rate, 
+    #     gl_storage_commit_rate, 
+    #     gl_storage_burst_rate,
+    #     gl_hidden_precision # Add this here to pass it into *args
+    # ]
     
     greenlake_ui_outputs = [
         gl_cpm_output, 
@@ -904,7 +936,7 @@ with gr.Blocks() as demo:
 
     # 2. Update Master Tracking Lists
     # Fixed parameters first, variable lists last
-    greenlake_fixed_params = [gl_committed_pct, gl_gpu_commit_rate, gl_gpu_burst_rate, gl_storage_commit_rate, gl_storage_burst_rate]
+    greenlake_fixed_params = [gl_committed_pct, gl_gpu_commit_rate, gl_gpu_burst_rate, gl_storage_commit_rate, gl_storage_burst_rate, gl_hidden_precision]
 
     # MUST match this sequence EXACTLY in the unpacker below
     greenlake_interactive_inputs = [gl_hidden_tshirt_idx] + greenlake_fixed_params + gl_hidden_model_sliders
@@ -933,7 +965,8 @@ with gr.Blocks() as demo:
         gl_gpu_commit_rate, 
         gl_gpu_burst_rate, 
         gl_storage_commit_rate, 
-        gl_storage_burst_rate
+        gl_storage_burst_rate,
+        gl_hidden_precision
     ]
     for component in gl_native_inputs:
         component.change(
@@ -941,6 +974,14 @@ with gr.Blocks() as demo:
             inputs=greenlake_interactive_inputs,
             outputs=greenlake_ui_outputs
         )
+
+# --- START CHANGE 29002: SYNC RADIO TO HIDDEN ---
+    precision_radio.change(
+        fn=lambda x: x, 
+        inputs=[precision_radio], 
+        outputs=[gl_hidden_precision]
+    )
+
 
 # --- END OF GREENLAKE EVENT DEPENDENCY REGISTRATION PATCH ---
 
@@ -974,6 +1015,7 @@ with gr.Blocks() as demo:
             pcai_vals.append(data[data_idx])
             data_idx += 1
 
+
         # 3. Extract values for Tab 3 (GreenLake Consumption)
         greenlake_vals = []
         for comp in greenlake_interactive_inputs:
@@ -996,7 +1038,12 @@ with gr.Blocks() as demo:
         if DEBUG_REFRESH_TABS:
             print(f"Returned from update_pcai_ui(): {len(pcai_results)} metrics")
             print("Executing update_greenlake_ui()...")
-            
+        
+        if DEBUG_REFRESH_TABS:
+            print(f"--- DEBUG: Hand-off ---")
+            print(f"PCAI Tokens (M) extracted: {GLOBAL_TOKENS_PER_DAY:,.2f}")
+            print(f"Passing to GreenLake UI...")  
+
         greenlake_results = update_greenlake_ui(*greenlake_vals)
         
         if DEBUG_REFRESH_TABS:

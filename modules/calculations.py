@@ -1,3 +1,5 @@
+import re
+
 # def format_token_label(val):
 #     if val >= 1e12: return f"{val/1e12:g}T"
 #     if val >= 1e9: return f"{val/1e9:g}B"
@@ -148,79 +150,201 @@ def format_large_number(num):
 
 # Update in calculations.py
 # GL calculations
-# --- START OF GREENLAKE CALCULATION ENGINE ---
-def calculate_greenlake_metrics(tshirt_row, committed_pct, 
-                               gpu_commit_rate, gpu_burst_rate, 
-                               storage_commit_rate, total_monthly_tokens_million=0):
-    """
-    Calculates GreenLake monthly operating costs and token efficiency profiles.
+# [365,25 (days) * 24 (hours)] / 12 (months)] = 730,50 Hours/Month
+
+def calculate_required_gpus(model_instances, private_llm_benchmarks, precision, gpu_type):
+    """Calculates total GPUs required based on model instance counts."""
+    prec_suffix = "16" if "16" in precision else "8"
+    tp_col = f"{gpu_type}_tp_{prec_suffix}"
     
-    Operational Rules (Per HPE Global Sizing Guidelines):
-    - Constant B = 730.5 Hours/Month (Based on 365.25 days/year standard)
-    - Storage Cost = Total Base GB * (Commit % / 100) * Storage Commit Rate
-    - Storage never enters burst states (no burst rate applied on delta)
+    total_gpus = 0
+    for i, model in enumerate(private_llm_benchmarks):
+        instances = model_instances[i]
+        if instances > 0:
+            tp_val = float(model.get(tp_col, 0))
+            total_gpus += (instances * tp_val)
+            # --- START CHANGE 20001: DEBUG LOGGING ---
+            if DEBUG_MODE:
+                print(f"  > Model {model.get('model')}: {instances} instances * {tp_val} TP = {instances * tp_val} GPUs")
+            # --- END CHANGE 20001 ---
+    
+    # --- START CHANGE 20002: TOTAL DEBUG LOGGING ---
+    if DEBUG_MODE:
+        print(f"  >> Total Required GPUs for {gpu_type}: {total_gpus}")
+    # --- END CHANGE 20002 ---
+    
+    return total_gpus
+
+
+# # --- START OF GREENLAKE CALCULATION ENGINE ---
+# def calculate_greenlake_metrics(tshirt_row, committed_pct, 
+#                                gpu_commit_rate, gpu_burst_rate, 
+#                                storage_commit_rate, total_monthly_tokens_million=0):
+
+# --- START CHANGE 26001: FULL REFINED GREENLAKE ENGINE ---
+def calculate_greenlake_metrics(tshirt_row, model_instances, committed_pct, 
+                               gpu_commit_rate, gpu_burst_rate, 
+                               storage_commit_rate, storage_burst_rate,
+                               precision, private_llm_benchmarks, total_monthly_tokens_million=0):
     """
-    try:
-        # Extract physical hardware allocations from the selected T-Shirt dictionary block
-        gpu_info = tshirt_row.get("GPU Type / Qty", "2x Unknown")
-        try:
-            gpus = float(gpu_info.split('x')[0])
-        except:
-            gpus = 2.0 # Developer fallback safety
+    Full GreenLake metric engine. Derives required GPU capacity dynamically
+    from model_instances and global PRIVATE_LLMS model data.
+    """
+    if DEBUG_MODE:
+        print(f"\n--- DEBUG: GL CALC START | Instances: {model_instances} ---")
 
-        # Handle text metrics parsing from storage data rows (e.g. "20 TB" -> 20000 GB)
-        storage_info = tshirt_row.get("Storage", "20 TB")
-        try:
-            if "TB" in storage_info:
-                storage_gb = float(storage_info.replace("TB", "").strip()) * 1000.0
-            else:
-                storage_gb = float(storage_info.replace("GB", "").strip())
-        except:
-            storage_gb = 20000.0 # Developer profile base fallback
-
-        commit_multiplier = (float(committed_pct) if committed_pct else 80.0) / 100.0
-        
-        g_commit = float(gpu_commit_rate) if gpu_commit_rate else 0.0
-        g_burst = float(gpu_burst_rate) if gpu_burst_rate else g_commit
-        s_commit = float(storage_commit_rate) if storage_commit_rate else 0.0
-        
-        # GPU Monthly Operating Calculus (B = 730.5)
-        hours_per_month = 730.5
-        total_gpu_hours = gpus * hours_per_month
-        committed_gpu_hours = total_gpu_hours * commit_multiplier
-        burst_gpu_hours = total_gpu_hours - committed_gpu_hours
-        
-        # Financial Math Execution Layer
-        total_gpu_cost = (committed_gpu_hours * g_commit) + (burst_gpu_hours * g_burst)
-        
-        # REFINED: Storage footprint restricted cleanly to committed capacity scaling
-        billable_storage_gb = storage_gb * commit_multiplier
-        total_storage_cost = billable_storage_gb * s_commit
-        
-        total_monthly_gl_cost = total_gpu_cost + total_storage_cost
-        
-        # Map cost per million if tokens flow natively
-        tokens_m = float(total_monthly_tokens_million) if total_monthly_tokens_million else 0.0
-        gl_cost_per_million_tokens = (total_monthly_gl_cost / tokens_m) if tokens_m > 0 else 0.0
+    # 1. Hardware Base
+    gpu_info = tshirt_row.get("GPU Type / Qty", "2x Unknown")
+    gpu_qty = float(gpu_info.split('x')[0])
+    gpu_type = "rtx" if "RTX" in gpu_info else "h200"
+    
+    # 2. Derive GPU requirements using global PRIVATE_LLMS
+    # Matches index of model_instances to index of PRIVATE_LLMS
+    prec_str = str(precision)
+    prec_suffix = "16" if "16" in prec_str else "8"
+    tp_col = f"{gpu_type}_tp_{prec_suffix}"
+    
+    required_gpus = 0
+    for idx, instances in enumerate(model_instances):
+        if instances > 0 and idx < len(private_llm_benchmarks):
+            tp_val = float(private_llm_benchmarks[idx].get(tp_col, 1))
+            required_gpus += (instances * tp_val)
+            if DEBUG_MODE:
+                print(f"  > Model {private_llm_benchmarks[idx]['model']}: {instances} inst * {tp_val} TP = {instances*tp_val} GPUs")
             
-        return {
-            "gpus_used": int(gpus),
-            "storage_tb_used": round(storage_gb / 1000.0, 1),
-            "billable_storage_tb": round(billable_storage_gb / 1000.0, 1),
-            "total_gpu_hours": round(total_gpu_hours, 2),
-            "committed_gpu_hours": round(committed_gpu_hours, 2),
-            "burst_gpu_hours": round(burst_gpu_hours, 2),
-            "total_gpu_cost": round(total_gpu_cost, 2),
-            "total_storage_cost": round(total_storage_cost, 2),
-            "total_monthly_gl_cost": round(total_monthly_gl_cost, 2),
-            "gl_cost_per_million_tokens": round(gl_cost_per_million_tokens, 4)
-        }
-    except Exception:
-        return {
-            "gpus_used": 2, "storage_tb_used": 20.0, "billable_storage_tb": 16.0,
-            "total_gpu_hours": 1461.0, "committed_gpu_hours": 1168.8, "burst_gpu_hours": 292.2,
-            "total_gpu_cost": 0.0, "total_storage_cost": 0.0, "total_monthly_gl_cost": 0.0,
-            "gl_cost_per_million_tokens": 0.0
-        }
-# --- END OF GREENLAKE CALCULATION ENGINE ---
+    # 3. Consumption Logic
+    committed_baseline = gpu_qty * (float(committed_pct) / 100.0)
+    billable_gpus = min(max(required_gpus, committed_baseline), gpu_qty)
+    
+    if DEBUG_MODE:
+        print(f"  > Required GPUs: {required_gpus} | Committed Baseline: {committed_baseline} | Billable: {billable_gpus}")
+
+    # 4. Financial Calculation (B = 730.5 hours/month)
+    hours = 730.5
+    committed_gpu_hours = committed_baseline * hours
+    burst_gpu_hours = max(0, (billable_gpus - committed_baseline) * hours)
+    
+    total_gpu_cost = (committed_gpu_hours * float(gpu_commit_rate)) + (burst_gpu_hours * float(gpu_burst_rate))
+    
+    # Storage Calculation
+    storage_info = tshirt_row.get("Storage", "20 TB")
+    match = re.search(r"(\d+(\.\d+)?)", storage_info)
+    storage_val = float(match.group(1)) if match else 0.0
+
+    # Apply TB conversion
+    if "TB" in storage_info.upper():
+        storage_gb = storage_val * 1000.0
+    else:
+        storage_gb = storage_val
+
+    if DEBUG_MODE:
+        print(f"DEBUG: Storage Parsing | Raw: '{storage_info}' | Extracted: {storage_val} | Final GB: {storage_gb}")
+
+    #storage_gb = float(storage_info.replace("TB", "").strip()) * 1000.0 if "TB" in storage_info else float(storage_info.replace("GB", "").strip())
+    billable_storage_gb = storage_gb * (float(committed_pct) / 100.0)
+    total_storage_cost = billable_storage_gb * float(storage_commit_rate)
+    
+    total_monthly_gl_cost = total_gpu_cost + total_storage_cost
+    
+    # CPM
+    tokens_m = float(total_monthly_tokens_million) if total_monthly_tokens_million else 0.0
+    gl_cost_per_million_tokens = (total_monthly_gl_cost / tokens_m) if tokens_m > 0 else 0.0
+    
+    # --- START DEBUG: CPM DERIVATION ---
+    if DEBUG_MODE:
+        print(f"DEBUG: CPM Calc | Total Cost: ${total_monthly_gl_cost:,.2f} | Tokens (M): {tokens_m:,.2f} | CPM: ${gl_cost_per_million_tokens:,.4f}")
+
+    if DEBUG_MODE:
+        print(f"--- DEBUG: GL CALC END | Total Cost: ${total_monthly_gl_cost:,.2f} ---\n")
+
+    return {
+        "required_gpus": round(required_gpus, 1), # ADD THIS
+        "gpus_used": round(billable_gpus, 1),
+        "storage_tb_used": round(storage_gb / 1000.0, 1),
+        "billable_storage_tb": round(billable_storage_gb / 1000.0, 1),
+        "total_gpu_hours": round((billable_gpus * hours), 2),
+        "committed_gpu_hours": round(committed_gpu_hours, 2),
+        "burst_gpu_hours": round(burst_gpu_hours, 2),
+        "total_gpu_cost": round(total_gpu_cost, 2),
+        "total_storage_cost": round(total_storage_cost, 2),
+        "total_monthly_gl_cost": round(total_monthly_gl_cost, 2),
+        "gl_cost_per_million_tokens": round(gl_cost_per_million_tokens, 4)
+    }
+# --- END CHANGE 26001 ---
+
+# # --- START OF GREENLAKE CALCULATION ENGINE ---
+# def calculate_greenlake_metrics(tshirt_row, committed_pct, 
+#                                gpu_commit_rate, gpu_burst_rate, 
+#                                storage_commit_rate, total_monthly_tokens_million=0):
+#     """
+#     Calculates GreenLake monthly operating costs and token efficiency profiles.
+    
+#     Operational Rules (Per HPE Global Sizing Guidelines):
+#     - Constant B = 730.5 Hours/Month (Based on 365.25 days/year standard)
+#     - Storage Cost = Total Base GB * (Commit % / 100) * Storage Commit Rate
+#     - Storage never enters burst states (no burst rate applied on delta)
+#     """
+#     try:
+#         # Extract physical hardware allocations from the selected T-Shirt dictionary block
+#         gpu_info = tshirt_row.get("GPU Type / Qty", "2x Unknown")
+#         try:
+#             gpus = float(gpu_info.split('x')[0])
+#         except:
+#             gpus = 2.0 # Developer fallback safety
+
+#         # Handle text metrics parsing from storage data rows (e.g. "20 TB" -> 20000 GB)
+#         storage_info = tshirt_row.get("Storage", "20 TB")
+#         try:
+#             if "TB" in storage_info:
+#                 storage_gb = float(storage_info.replace("TB", "").strip()) * 1000.0
+#             else:
+#                 storage_gb = float(storage_info.replace("GB", "").strip())
+#         except:
+#             storage_gb = 20000.0 # Developer profile base fallback
+
+#         commit_multiplier = (float(committed_pct) if committed_pct else 80.0) / 100.0
+        
+#         g_commit = float(gpu_commit_rate) if gpu_commit_rate else 0.0
+#         g_burst = float(gpu_burst_rate) if gpu_burst_rate else g_commit
+#         s_commit = float(storage_commit_rate) if storage_commit_rate else 0.0
+        
+#         # GPU Monthly Operating Calculus (B = 730.5)
+#         hours_per_month = 730.5
+#         total_gpu_hours = gpus * hours_per_month
+#         committed_gpu_hours = total_gpu_hours * commit_multiplier
+#         burst_gpu_hours = total_gpu_hours - committed_gpu_hours
+        
+#         # Financial Math Execution Layer
+#         total_gpu_cost = (committed_gpu_hours * g_commit) + (burst_gpu_hours * g_burst)
+        
+#         # REFINED: Storage footprint restricted cleanly to committed capacity scaling
+#         billable_storage_gb = storage_gb * commit_multiplier
+#         total_storage_cost = billable_storage_gb * s_commit
+        
+#         total_monthly_gl_cost = total_gpu_cost + total_storage_cost
+        
+#         # Map cost per million if tokens flow natively
+#         tokens_m = float(total_monthly_tokens_million) if total_monthly_tokens_million else 0.0
+#         gl_cost_per_million_tokens = (total_monthly_gl_cost / tokens_m) if tokens_m > 0 else 0.0
+            
+#         return {
+#             "gpus_used": int(gpus),
+#             "storage_tb_used": round(storage_gb / 1000.0, 1),
+#             "billable_storage_tb": round(billable_storage_gb / 1000.0, 1),
+#             "total_gpu_hours": round(total_gpu_hours, 2),
+#             "committed_gpu_hours": round(committed_gpu_hours, 2),
+#             "burst_gpu_hours": round(burst_gpu_hours, 2),
+#             "total_gpu_cost": round(total_gpu_cost, 2),
+#             "total_storage_cost": round(total_storage_cost, 2),
+#             "total_monthly_gl_cost": round(total_monthly_gl_cost, 2),
+#             "gl_cost_per_million_tokens": round(gl_cost_per_million_tokens, 4)
+#         }
+#     except Exception:
+#         return {
+#             "gpus_used": 2, "storage_tb_used": 20.0, "billable_storage_tb": 16.0,
+#             "total_gpu_hours": 1461.0, "committed_gpu_hours": 1168.8, "burst_gpu_hours": 292.2,
+#             "total_gpu_cost": 0.0, "total_storage_cost": 0.0, "total_monthly_gl_cost": 0.0,
+#             "gl_cost_per_million_tokens": 0.0
+#         }
+# # --- END OF GREENLAKE CALCULATION ENGINE ---
 
