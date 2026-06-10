@@ -248,7 +248,8 @@ def calculate_greenlake_metrics(tshirt_row, model_instances, committed_pct,
     
     # CPM
     tokens_m = float(total_monthly_tokens_million) if total_monthly_tokens_million else 0.0
-    gl_cost_per_million_tokens = (total_monthly_gl_cost / tokens_m) if tokens_m > 0 else 0.0
+    # tokens million is per day
+    gl_cost_per_million_tokens = (total_monthly_gl_cost / (tokens_m * 365/12)) if tokens_m > 0 else 0.0
     
     # --- START DEBUG: CPM DERIVATION ---
     if DEBUG_MODE:
