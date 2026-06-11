@@ -7,7 +7,11 @@ import pandas as pd
 
 
 # GLOBALS for passing values
+# HARDCODED CONSTANTS
+GLOBAL_HOURS_PER_DAY = 24
+GLOBAL_DAYS_PER_PERIOD = 365
 GLOBAL_TOKENS_PER_DAY = 0
+GLOBAL_TOTAL_GPUS = 0
 GLOBAL_FINAL_RESULTS_REGISTRY = {
     "public_cloud": {"tokens": 0, "cost": 0, "cpm": 0, "gpus_used": 0, "total_gpus": 0, "commit_gpus": 0 },
     "pcai_capex": {"tokens": 0, "cost": 0, "cpm": 0, "gpus_used": 0, "total_gpus": 0, "commit_gpus": 0 },
@@ -93,6 +97,8 @@ def update_greenlake_ui(*args):
 
     global GLOBAL_TOKENS_PER_DAY
     global GLOBAL_FINAL_RESULTS_REGISTRY
+    global GLOBAL_TOTAL_GPUS
+    global GLOBAL_HOURS_PER_DAY, GLOBAL_DAYS_PER_PERIOD
 
     if len(args) < 6:
         return "$0.0000", "<p style='color:#6B8099;'>Waiting for data...</p>"
@@ -168,16 +174,16 @@ def update_greenlake_ui(*args):
     #cpm_str = f"<div class='green-text'>${gl_data['gl_cost_per_million_tokens']:,.2f} <span class='unit-text'>/ M tokens</span></div>"
     cpm_str = f"${gl_data['gl_cost_per_million_tokens']:,.2f} <span class='unit-text'>/ M tokens</span>"
 
-    total_gpus_pcai_ui = GLOBAL_FINAL_RESULTS_REGISTRY["pcai_greenlake"]["total_gpus"]
+    total_gpus_pcai_ui = GLOBAL_FINAL_RESULTS_REGISTRY["pcai_capex"].get("total_gpus",0)
 
-    GLOBAL_FINAL_RESULTS_REGISTRY["pcai_greenlake"] = {
+    GLOBAL_FINAL_RESULTS_REGISTRY["pcai_greenlake"].update({
             "tokens": tokens_per_month_million * 365/12, # the value is tokens per day
             "cost": gl_data['total_gpu_cost'] + gl_data['total_storage_cost'], # monthly cost
             "cpm": gl_data['gl_cost_per_million_tokens'],
-            #"gpus_used": gl_data['required_gpus'], #take from pcai_ui workload
-            #"total_gpus": 0, #take from pcai_ui workload
+            "gpus_used": gl_data['required_gpus'], #take from pcai_ui workload
+            "total_gpus": max(GLOBAL_TOTAL_GPUS, total_gpus_pcai_ui), #take from pcai_ui workload
             "commit_gpus": gl_data['gpus_used']
-        }
+        })
 
 
     # Formulate interactive layout template matrix
@@ -196,8 +202,8 @@ def update_greenlake_ui(*args):
                     <td style="padding:8px 10px; background-color: #1A2744; text-align:right; color: white;">{gl_data['required_gpus']} GPUs</td>
                 </tr>
                 <tr style="border-bottom: 1px solid #2A3F5C;">
-                    <td style="padding:8px 10px; background-color: #1A2744; color: #CCD2D8; white-space: nowrap;">Physical Compute Footprint</td>
-                    <td style="padding:8px 10px; background-color: #1A2744; text-align:right; color: white;">{gl_data['gpus_used']} GPUs</td>
+                    <td style="padding:8px 10px; background-color: #1A2744; color: #CCD2D8; white-space: nowrap;">Committed Compute Footprint</td>
+                    <td style="padding:8px 10px; background-color: #1A2744; text-align:right; color: white;">{gl_data['gpus_used']:.1f} GPUs</td>
                 </tr>
                 <tr style="border-bottom: 1px solid #2A3F5C;">
                     <td style="padding:8px 10px; background-color: #1A2744; color: #CCD2D8; white-space: nowrap;">Total Monthly Allocated GPU-Hours</td>
@@ -252,16 +258,23 @@ def update_pcai_ui(*args):
     """
     global GLOBAL_TOKENS_PER_DAY
     global GLOBAL_FINAL_RESULTS_REGISTRY
+    global GLOBAL_TOTAL_GPUS
+    global GLOBAL_HOURS_PER_DAY, GLOBAL_DAYS_PER_PERIOD
+
 
     try:
         # 1. Unpack Fixed Positions (Index 0-5)
         # Using the index from the button click logic
         selected_idx = int(args[0])  
         precision    = args[1]
-        work_hours   = args[2] 
+        work_hours   = args[2]
         work_days    = args[3]
         capex_val    = args[4]
         capex_years  = args[5]
+
+        ### OVERWRITE work_hours and work_days
+        work_hours   = GLOBAL_HOURS_PER_DAY  
+        work_days    = GLOBAL_DAYS_PER_PERIOD
         
         # 2. Unpack Variable Positions (Index 6 onwards)
         model_instances = list(args[6:])
@@ -283,7 +296,7 @@ def update_pcai_ui(*args):
     
     # fixed 24 hours and 365 days
     results = calculate_pcai_costs(
-    target_ts, model_instances, precision, 24, 365, 
+    target_ts, model_instances, precision, work_hours, work_days, 
     capex_val, capex_years, PRIVATE_LLMS)
 
     total_tokens_annual, cpm, breakdown, error_msg, used_gpu, avail_gpu = results
@@ -301,20 +314,23 @@ def update_pcai_ui(*args):
 
     # assign global
     GLOBAL_TOKENS_PER_DAY = tokens_per_day
-    GLOBAL_FINAL_RESULTS_REGISTRY["pcai_capex"] = {
+    GLOBAL_TOTAL_GPUS = avail_gpu
+
+    GLOBAL_FINAL_RESULTS_REGISTRY["pcai_capex"].update({
     "tokens": tokens_per_day * 365/12,  # tokens per month
     "cost": (capex_val / (capex_years * 12)), # amortized cost per month
     "cpm": cpm,
     "gpus_used": used_gpu, 
     "total_gpus": avail_gpu, 
     "commit_gpus": 0 
-    }
+    })
 
     # assign gpu workload in greenlake also
-    GLOBAL_FINAL_RESULTS_REGISTRY["pcai_greenlake"] = {
+    GLOBAL_FINAL_RESULTS_REGISTRY["pcai_greenlake"].update({
     "gpus_used": used_gpu, 
     "total_gpus": avail_gpu, 
-    }
+    })
+
     cpm_str = f"${cpm:,.2f} <span class='unit-text'>/ M tokens</span>"
     
     #formatted_tokens = format_large_number(tokens_per_day)
@@ -608,6 +624,9 @@ with gr.Blocks() as demo:
                             </h1>
                             <p style="color: #6B8099; margin: 0; font-size: 0.9rem; font-weight: 400;">
                                 Private Cloud AI • APAC Presales
+                            </p>
+                            <p style="color: #01A982; margin: 0; font-size: 0.85rem; font-weight: 500; font-style: italic; opacity: 0.95;">
+                                Minor number mismatch may occur due to rounding
                             </p>
                         </div>
                     </div>
