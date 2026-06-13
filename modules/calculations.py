@@ -260,7 +260,8 @@ def calculate_greenlake_metrics(tshirt_row, model_instances, committed_pct,
 
     return {
         "required_gpus": round(required_gpus, 1), # ADD THIS
-        "gpus_used": round(billable_gpus, 1),
+        "gpus_used": round(committed_baseline, 1), # make it Committed GPUs always
+        #"gpus_used": round(billable_gpus, 1),
         "storage_tb_used": round(storage_gb / 1000.0, 1),
         "billable_storage_tb": round(billable_storage_gb / 1000.0, 1),
         "total_gpu_hours": round((billable_gpus * hours), 2),

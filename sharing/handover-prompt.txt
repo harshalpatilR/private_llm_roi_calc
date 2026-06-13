@@ -1,0 +1,104 @@
+Here is a comprehensive transition prompt template designed to hand over this codebase effectively. It organizes all the architectural, UI, and backend details mentioned in the transcript into a clean, actionable format for the incoming engineer.
+
+---
+
+# Codebase Handover & Knowledge Transfer: LLM Calculator Project
+
+### **Context & Overview**
+
+You are being handed over the codebase for the LLM Calculator application. This is a **Gradio-based** Python application used to estimate and compare costs across different deployment models (Public Cloud, CapEx/PCAI, and GreenLake).
+
+Your goal is to understand the current architecture, maintain consistency in its structural framework, and ensure backend computations and UI interactivity remain tightly coupled during future modifications.
+
+---
+
+### **1. Codebase Directory Structure**
+
+The project is structured with a clear separation between the UI layout, configuration data, and backend computation logic:
+
+* **Root Directory:**
+* 
+`app.py`: The core application file that initializes the app, loads configurations, defines layout blocks, and manages UI interactivity.
+
+
+* 
+`*.csv`: Various configuration files loaded at startup containing baseline data for private LLMs, public LLMs, and t-shirt sizes.
+
+
+* 
+`pip list 120626.txt`: Contains the specific pinned package versions required for the Python virtual environment.
+
+
+
+
+* **`/modules` Subdirectory:**
+* 
+`calculations.py`: The backend engine containing all mathematical and financial metric computations.
+
+
+
+
+* **`/UI` Subdirectory:**
+* Contains files managing the styling, HPE branding colors, custom themes, and custom CSS required to format the Gradio interface elements.
+
+
+
+
+
+---
+
+### **2. Core UI Architecture & Interactivity Flow**
+
+The frontend is constructed using Gradio elements (Blocks, Rows, Columns). Interactivity is divided across three main deployment tabs, each driven by dedicated UI functions that trigger backend calculations:
+
+| Tab / Deployment Model | UI Interactivity Function | Backend Calculation Function Called |
+| --- | --- | --- |
+| **Public Cloud** | <br>`update_ui` 
+
+ | <br>`calculate_cloud_costs` 
+
+ |
+| **CapEx (PCAI)** | <br>`update_PCAI_ui` 
+
+ | <br>`calculate_PCAI_costs` 
+
+ |
+| **GreenLake** | <br>`update_greenlake_ui` 
+
+ | <br>`calculate_greenlake_metrics` 
+
+ |
+
+#### **The Master Refresh Mechanism**
+
+* 
+**Function:** `refresh_all_tabs` 
+
+
+* 
+**How it works:** To manage application-wide updates, a master update button is implemented. This mechanism packs all Gradio components/objects from every individual tab together and passes them to `refresh_all_tabs` to update the state across the entire UI seamlessly.
+
+
+
+---
+
+### **3. Next Steps & Onboarding Checklist**
+
+To get started with the codebase, please complete the following steps:
+
+1. 
+**Environment Setup:** Spin up a clean Python virtual environment and install the required dependencies using the `pip list 120626.txt` file.
+
+
+2. 
+**Code Review:** Review `app.py` to see how CSV configurations are parsed at startup, and trace how a user input triggers an `update_*_ui` function down to `calculations.py`.
+
+
+3. 
+**UI Styling:** Inspect the `/UI` folder to understand how custom CSS styles and layout restrictions are being mapped to Gradio objects.
+
+
+
+> **Development Mandate:** For any future feature additions, bug fixes, or scaling modifications, you must keep the codebase structurally consistent. Ensure that UI components remain separated from computation modules, styling elements are kept in the UI subdirectory, and calculations are strictly handled in `calculations.py`.
+> 
+>
