@@ -96,7 +96,9 @@ def calculate_pcai_costs(tshirt_data, model_instances, precision, hours, days, c
             
             m_gpus = instances * tp_val
             # throughput = tokens per GPU-second * total GPUs assigned to this model type
-            m_tps = m_gpus * tps_val 
+            # BUG FIX - tps is per model instane so do not multiply
+            #m_tps = m_gpus * tps_val 
+            m_tps = tps_val 
             
             total_tps += m_tps
             total_gpus_used += m_gpus
